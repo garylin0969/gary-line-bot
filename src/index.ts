@@ -24,6 +24,13 @@ interface RandomImageResponse {
 	height: string;
 }
 
+interface RandomImageResponse {
+	code: string;
+	imgurl: string;
+	width: string;
+	height: string;
+}
+
 interface HoroscopeData {
 	type: string;
 	name: string;
