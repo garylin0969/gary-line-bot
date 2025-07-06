@@ -17,7 +17,21 @@
 			"preview_id": "37456c0699ba4f169629d30f7e7962a8"
 		}
 	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "GAME_STATE",
+				"class_name": "GameStateObject"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["GameStateObject"]
+		}
+	],
 	"triggers": {
-		"crons": ["0 0 * * *"]
+		"crons": ["0 16 * * *"]
 	}
 }
