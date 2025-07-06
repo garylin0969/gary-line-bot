@@ -1,0 +1,23 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "gary-line-bot",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-07-05",
+	"compatibility_flags": ["nodejs_compat"],
+	"observability": {
+		"enabled": true
+	},
+	"vars": {
+		"LINE_CHANNEL_ACCESS_TOKEN": "177CrjqRypf9A1lTlm4rDw9vP+VIFzUljxLKTpjqfgqsfK1hq2tE0QrylSKpWpAIukYw1KZFS2GrIE9QkJYRb+yD7jxMVi9toRGn2R9YIpdEV3i9WrZ8hkh/9i7R15KwbLPSwR+Sc7cks2lcDeki0AdB04t89/1O/w1cDnyilFU="
+	},
+	"kv_namespaces": [
+		{
+			"binding": "HOROSCOPE_CACHE",
+			"id": "7ed885addeee4c279c2fe892df02947d",
+			"preview_id": "37456c0699ba4f169629d30f7e7962a8"
+		}
+	],
+	"triggers": {
+		"crons": ["0 0 * * *"]
+	}
+}
