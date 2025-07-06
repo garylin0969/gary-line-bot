@@ -87,6 +87,14 @@ function stars(n: number): string {
 	return full + empty;
 }
 
+function truncateToFirstPeriod(text: string): string {
+	const periodIndex = text.indexOf('。');
+	if (periodIndex !== -1) {
+		return text.substring(0, periodIndex + 1);
+	}
+	return text;
+}
+
 function logDebug(message: string, data?: any) {
 	console.log(`[DEBUG] ${message}`, data ? JSON.stringify(data) : '');
 }
@@ -334,10 +342,10 @@ export default {
 
 				const toTw = (s: string): Promise<string> => opencc(s || '');
 
-				const loveText = await toTw(data.fortunetext.love);
-				const workText = await toTw(data.fortunetext.work);
-				const moneyText = await toTw(data.fortunetext.money);
-				const healthText = await toTw(data.fortunetext.health);
+				const loveText = truncateToFirstPeriod(await toTw(data.fortunetext.love));
+				const workText = truncateToFirstPeriod(await toTw(data.fortunetext.work));
+				const moneyText = truncateToFirstPeriod(await toTw(data.fortunetext.money));
+				const healthText = truncateToFirstPeriod(await toTw(data.fortunetext.health));
 				const luckyColor = await toTw(data.luckycolor);
 
 				const loveStars = stars(data.fortune.love);
