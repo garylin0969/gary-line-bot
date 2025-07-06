@@ -248,10 +248,15 @@ export class GameStateObject {
 					playerCount: newPlayerCount,
 					maxPlayers: game.maxPlayers,
 				});
-				delete this.games[groupId];
 			}
 
 			await this.saveState();
+
+			if (isComplete) {
+				delete this.games[groupId];
+				await this.saveState();
+			}
+
 			return new Response(JSON.stringify(response));
 		}
 
@@ -750,36 +755,54 @@ class RollGameService {
 					players: result.players,
 				});
 
-				// 獲取所有玩家的名稱
-				const playerNames = await Promise.all(
-					Object.keys(result.players).map((id) => ApiService.fetchGroupMemberProfile(id, groupId, accessToken))
-				);
+				try {
+					// 獲取所有玩家的名稱
+					const playerNames = await Promise.all(
+						Object.keys(result.players).map((id) => ApiService.fetchGroupMemberProfile(id, groupId, accessToken))
+					);
 
-				const playerMap = Object.fromEntries(Object.keys(result.players).map((id, index) => [id, playerNames[index]]));
+					const playerMap = Object.fromEntries(Object.keys(result.players).map((id, index) => [id, playerNames[index]]));
 
-				const results = Object.entries(result.players)
-					.map(([id, score]) => `${playerMap[id]} : ${score} 點`)
-					.join('\n');
+					const results = Object.entries(result.players)
+						.map(([id, score]) => `${playerMap[id]} : ${score} 點`)
+						.join('\n');
 
-				const winner = Object.entries(result.players).sort((a, b) => b[1] - a[1])[0][0];
+					const winner = Object.entries(result.players).sort((a, b) => b[1] - a[1])[0][0];
 
-				// 使用 LINE Messaging API 的 push message 來發送最終結果
-				await fetch('https://api.line.me/v2/bot/message/push', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						Authorization: `Bearer ${accessToken}`,
-					},
-					body: JSON.stringify({
-						to: groupId,
-						messages: [
-							{
-								type: 'text',
-								text: `${results}\n獲勝者為 : ${playerMap[winner]}`,
-							},
-						],
-					}),
-				});
+					// 確保結果訊息發送成功
+					await fetch('https://api.line.me/v2/bot/message/push', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							Authorization: `Bearer ${accessToken}`,
+						},
+						body: JSON.stringify({
+							to: groupId,
+							messages: [
+								{
+									type: 'text',
+									text: `${results}\n獲勝者為 : ${playerMap[winner]}`,
+								},
+							],
+						}),
+					}).then((response) => {
+						if (!response.ok) {
+							throw new Error('Failed to send final results');
+						}
+					});
+
+					logDebug('Final results sent successfully', {
+						groupId,
+						results,
+						winner: playerMap[winner],
+					});
+				} catch (error) {
+					logDebug('Error sending final results', {
+						error,
+						groupId,
+					});
+					// 如果發送結果失敗，我們仍然要繼續，因為遊戲已經結束
+				}
 			}
 		} catch (error) {
 			logDebug('Error in handleRoll', {
