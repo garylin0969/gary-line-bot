@@ -604,6 +604,25 @@ class RollGameService {
 	private static async handleRollNum(groupId: string, replyToken: string, text: string, accessToken: string, env: Env): Promise<void> {
 		logDebug('Processing !rollnum command', { groupId });
 
+		// First check if there's an active game
+		const id = env.GAME_STATE.idFromName(groupId);
+		const obj = env.GAME_STATE.get(id);
+
+		// 使用 URL 來處理請求參數
+		const getUrl = new URL('http://localhost');
+		getUrl.searchParams.set('groupId', groupId);
+		getUrl.searchParams.set('action', 'get');
+
+		const resp = await obj.fetch(getUrl);
+		const responseText = await resp.text();
+		const game = resp.ok && responseText ? (JSON.parse(responseText) as GameState) : null;
+
+		if (game) {
+			logDebug('Active game found when trying to create new game', { groupId });
+			await ApiService.sendReply(replyToken, '還有正在進行中的比大小，先比完好嗎 親 ~~', accessToken);
+			return;
+		}
+
 		const parts = text.split(' ');
 		logDebug('Command parts', { parts });
 
@@ -622,16 +641,14 @@ class RollGameService {
 			return;
 		}
 
-		const id = env.GAME_STATE.idFromName(groupId);
-		const obj = env.GAME_STATE.get(id);
-		const url = new URL('https://dummy-url');
+		const url = new URL('http://localhost');
 		url.searchParams.set('groupId', groupId);
 		url.searchParams.set('action', 'create');
 		url.searchParams.set('maxPlayers', num.toString());
 
-		const resp = await obj.fetch(url);
-		if (!resp.ok) {
-			logDebug('Failed to create game', { status: resp.status });
+		const createResp = await obj.fetch(url);
+		if (!createResp.ok) {
+			logDebug('Failed to create game', { status: createResp.status });
 			await ApiService.sendReply(replyToken, '建立遊戲失敗，請稍後再試', accessToken);
 			return;
 		}
@@ -652,7 +669,7 @@ class RollGameService {
 			const obj = env.GAME_STATE.get(id);
 
 			// First check if game exists
-			const getUrl = new URL('https://dummy-url');
+			const getUrl = new URL('http://localhost');
 			getUrl.searchParams.set('groupId', groupId);
 			getUrl.searchParams.set('action', 'get');
 
@@ -675,7 +692,7 @@ class RollGameService {
 			}
 
 			// Try to roll
-			const rollUrl = new URL('https://dummy-url');
+			const rollUrl = new URL('http://localhost');
 			rollUrl.searchParams.set('groupId', groupId);
 			rollUrl.searchParams.set('action', 'roll');
 			rollUrl.searchParams.set('userId', userId);
