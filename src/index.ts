@@ -214,6 +214,12 @@ function findZodiacMatch(text: string): string | undefined {
 	// 正規化文字（處理 Unicode 變體）
 	const normalizedText = text.normalize('NFKC');
 
+	// 檢查文字長度，只有2個字或3個字才進行匹配
+	if (normalizedText.length < 2 || normalizedText.length > 3) {
+		logDebug(`Text length ${normalizedText.length} not suitable for zodiac matching`);
+		return undefined;
+	}
+
 	// 記錄調試資訊
 	logDebug('Normalized text:', normalizedText);
 	logDebug(
