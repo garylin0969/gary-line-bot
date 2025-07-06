@@ -17,6 +17,13 @@ interface Env {
 	HOROSCOPE_CACHE: KVNamespace;
 }
 
+interface RandomImageResponse {
+	code: string;
+	imgurl: string;
+	width: string;
+	height: string;
+}
+
 interface HoroscopeData {
 	type: string;
 	name: string;
@@ -93,6 +100,30 @@ function truncateToFirstPeriod(text: string): string {
 		return text.substring(0, periodIndex + 1);
 	}
 	return text;
+}
+
+async function fetchRandomImage(): Promise<string | null> {
+	const apiUrl = 'https://api.btstu.cn/sjbz/api.php?lx=meizi&format=json';
+
+	try {
+		logDebug(`Fetching random image from API: ${apiUrl}`);
+		const response = await fetch(apiUrl);
+		logDebug(`Random image API response status: ${response.status}`);
+
+		const imageData = (await response.json()) as RandomImageResponse;
+		logDebug(`Random image API response data:`, imageData);
+
+		if (imageData.code === '200' && imageData.imgurl) {
+			logDebug(`Successfully fetched random image: ${imageData.imgurl}`);
+			return imageData.imgurl;
+		}
+
+		logDebug(`API returned code: ${imageData.code}`);
+		return null;
+	} catch (error) {
+		logDebug(`Error fetching random image:`, error);
+		return null;
+	}
 }
 
 function logDebug(message: string, data?: any) {
@@ -291,6 +322,34 @@ export default {
 
 				logDebug('Original text:', originalText);
 				logDebug('Converted text:', text);
+
+				// 檢查是否是「抽」字
+				if (text === '抽') {
+					logDebug('User requested random image');
+					const imageUrl = await fetchRandomImage();
+
+					if (imageUrl) {
+						await fetch('https://api.line.me/v2/bot/message/reply', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								Authorization: `Bearer ${accessToken}`,
+							},
+							body: JSON.stringify({
+								replyToken: event.replyToken,
+								messages: [
+									{
+										type: 'image',
+										originalContentUrl: imageUrl,
+										previewImageUrl: imageUrl,
+									},
+								],
+							}),
+						});
+					}
+					return;
+				}
+
 				logDebug('Available zodiac keys:', Object.keys(zodiacMap));
 
 				const match = findZodiacMatch(text);
