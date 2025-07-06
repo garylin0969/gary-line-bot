@@ -746,11 +746,8 @@ class RollGameService {
 			// 獲取用戶名稱
 			const displayName = await ApiService.fetchGroupMemberProfile(userId, groupId, accessToken);
 
-			// 先發送當前玩家的骰子結果
-			await ApiService.sendReply(replyToken, `${displayName}骰出 : ${result.point} 點`, accessToken);
-
 			if (result.isComplete) {
-				logDebug('Game complete, sending final results', {
+				logDebug('Game complete, preparing final results', {
 					groupId,
 					players: result.players,
 				});
@@ -769,26 +766,26 @@ class RollGameService {
 
 					const winner = Object.entries(result.players).sort((a, b) => b[1] - a[1])[0][0];
 
-					// 確保結果訊息發送成功
-					await fetch('https://api.line.me/v2/bot/message/push', {
+					// 在一次回覆中發送兩條訊息
+					await fetch(CONFIG.API.LINE_REPLY, {
 						method: 'POST',
 						headers: {
 							'Content-Type': 'application/json',
 							Authorization: `Bearer ${accessToken}`,
 						},
 						body: JSON.stringify({
-							to: groupId,
+							replyToken,
 							messages: [
+								{
+									type: 'text',
+									text: `${displayName}骰出 : ${result.point} 點`,
+								},
 								{
 									type: 'text',
 									text: `${results}\n獲勝者為 : ${playerMap[winner]}`,
 								},
 							],
 						}),
-					}).then((response) => {
-						if (!response.ok) {
-							throw new Error('Failed to send final results');
-						}
 					});
 
 					logDebug('Final results sent successfully', {
@@ -801,8 +798,12 @@ class RollGameService {
 						error,
 						groupId,
 					});
-					// 如果發送結果失敗，我們仍然要繼續，因為遊戲已經結束
+					// 如果發送完整結果失敗，至少發送當前玩家的結果
+					await ApiService.sendReply(replyToken, `${displayName}骰出 : ${result.point} 點`, accessToken);
 				}
+			} else {
+				// 如果遊戲還沒結束，只發送當前玩家的結果
+				await ApiService.sendReply(replyToken, `${displayName}骰出 : ${result.point} 點`, accessToken);
 			}
 		} catch (error) {
 			logDebug('Error in handleRoll', {
@@ -886,11 +887,13 @@ class MessageHandlerService {
 
 	private async handleCommand(event: LineEvent, ctx: ExecutionContext): Promise<void> {
 		const text = event.message!.text.trim();
-		logDebug('Starting command handling', { text });
+		// 先將全形符號轉換為半形符號
+		const normalizedText = text.replace(/[！]/g, '!');
+		logDebug('Starting command handling', { text, normalizedText });
 
 		// 處理遊戲命令
-		if (text === '!roll' || text.startsWith('!rollnum')) {
-			logDebug('Detected game command', { text });
+		if (normalizedText === '!roll' || normalizedText.startsWith('!rollnum')) {
+			logDebug('Detected game command', { normalizedText });
 			await this.handleGameCommand(event, ctx);
 			return;
 		}
@@ -902,7 +905,7 @@ class MessageHandlerService {
 			return;
 		}
 
-		logDebug('No matching command handler found', { text });
+		logDebug('No matching command handler found', { normalizedText });
 	}
 
 	private async handleGameCommand(event: LineEvent, ctx: ExecutionContext): Promise<void> {
