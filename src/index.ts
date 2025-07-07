@@ -10,9 +10,11 @@ const CONFIG = {
 		EXPIRATION: 25 * 60 * 60, // 25小時後過期
 	},
 	API: {
-		RANDOM_IMAGE: 'https://api.btstu.cn/sjbz/api.php?lx=meizi&format=json',
+		RANDOM_IMAGE: 'https://api.vvhan.com/api/avatar/girl?type=json',
 		LINE_REPLY: 'https://api.line.me/v2/bot/message/reply',
 		HOROSCOPE: 'https://api.vvhan.com/api/horoscope',
+		SEXY_TEXT: 'https://api.vvhan.com/api/text/sexy?type=json',
+		DOG_TEXT: 'https://api.vvhan.com/api/text/dog?type=json',
 	},
 } as const;
 
@@ -38,10 +40,18 @@ interface Env {
 }
 
 interface RandomImageResponse {
-	code: string;
-	imgurl: string;
-	width: string;
-	height: string;
+	success: boolean;
+	type: string;
+	url: string;
+}
+
+interface TextResponse {
+	success: boolean;
+	type: string;
+	data: {
+		id: number;
+		content: string;
+	};
 }
 
 interface HoroscopeData {
@@ -337,21 +347,53 @@ const DateUtils = {
 };
 
 // API Functions
+async function fetchText(apiUrl: string): Promise<string | null> {
+	try {
+		logDebug(`Fetching text from API: ${apiUrl}`);
+		const response = await fetch(apiUrl);
+		logDebug(`Text API response status: ${response.status}`);
+
+		if (!response.ok) {
+			logDebug(`API request failed with status: ${response.status}`);
+			return null;
+		}
+
+		const data = (await response.json()) as TextResponse;
+		logDebug(`Text API response data:`, data);
+
+		if (data.success && data.data?.content) {
+			logDebug(`Successfully fetched text: ${data.data.content}`);
+			return data.data.content;
+		}
+
+		logDebug(`API request was not successful`);
+		return null;
+	} catch (error) {
+		logDebug(`Error fetching text:`, error);
+		return null;
+	}
+}
+
 async function fetchRandomImage(): Promise<string | null> {
 	try {
 		logDebug(`Fetching random image from API: ${CONFIG.API.RANDOM_IMAGE}`);
 		const response = await fetch(CONFIG.API.RANDOM_IMAGE);
 		logDebug(`Random image API response status: ${response.status}`);
 
+		if (!response.ok) {
+			logDebug(`API request failed with status: ${response.status}`);
+			return null;
+		}
+
 		const imageData = (await response.json()) as RandomImageResponse;
 		logDebug(`Random image API response data:`, imageData);
 
-		if (imageData.code === '200' && imageData.imgurl) {
-			logDebug(`Successfully fetched random image: ${imageData.imgurl}`);
-			return imageData.imgurl;
+		if (imageData.success && imageData.url) {
+			logDebug(`Successfully fetched random image: ${imageData.url}`);
+			return imageData.url;
 		}
 
-		logDebug(`API returned code: ${imageData.code}`);
+		logDebug(`API request was not successful`);
 		return null;
 	} catch (error) {
 		logDebug(`Error fetching random image:`, error);
@@ -795,7 +837,9 @@ function isCommand(text: string): boolean {
 	const isRoll = normalizedText === '!roll';
 	const isRollNum = normalizedText.startsWith('!rollnum');
 	const isDraw = normalizedText === '抽';
-	const result = isRoll || isRollNum || isDraw;
+	const isSexy = normalizedText === '!騷話' || normalizedText === '!骚话';
+	const isDog = normalizedText === '!舔狗';
+	const result = isRoll || isRollNum || isDraw || isSexy || isDog;
 
 	logDebug('Command detection', {
 		originalText: text,
@@ -803,6 +847,8 @@ function isCommand(text: string): boolean {
 		isRoll,
 		isRollNum,
 		isDraw,
+		isSexy,
+		isDog,
 		result,
 	});
 
@@ -826,6 +872,20 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	if (text === '抽') {
 		logDebug('Detected draw command');
 		await handleRandomImage(event.replyToken!, env);
+		return;
+	}
+
+	// 處理「騷話」命令
+	if (normalizedText === '!騷話' || normalizedText === '!骚话') {
+		logDebug('Detected sexy text command');
+		await handleSexyText(event.replyToken!, env);
+		return;
+	}
+
+	// 處理「舔狗」命令
+	if (normalizedText === '!舔狗') {
+		logDebug('Detected dog text command');
+		await handleDogText(event.replyToken!, env);
 		return;
 	}
 
@@ -941,6 +1001,26 @@ ${moneyText}
 健康運 ${healthStars}
 ${healthText}
 幸運數字 : ${data.luckynumber}。幸運顏色 : ${luckyColor}`;
+}
+
+async function handleSexyText(replyToken: string, env: Env): Promise<void> {
+	logDebug('Handling sexy text request');
+	const text = await fetchText(CONFIG.API.SEXY_TEXT);
+	if (text) {
+		const converter = await getConverter();
+		const traditionalText = await converter(text);
+		await sendReply(replyToken, traditionalText, env.LINE_CHANNEL_ACCESS_TOKEN);
+	}
+}
+
+async function handleDogText(replyToken: string, env: Env): Promise<void> {
+	logDebug('Handling dog text request');
+	const text = await fetchText(CONFIG.API.DOG_TEXT);
+	if (text) {
+		const converter = await getConverter();
+		const traditionalText = await converter(text);
+		await sendReply(replyToken, traditionalText, env.LINE_CHANNEL_ACCESS_TOKEN);
+	}
 }
 
 // Main handler
