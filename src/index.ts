@@ -98,6 +98,13 @@ interface RollResponse {
 	players: Record<string, number>;
 }
 
+interface LineMessage {
+	type: string;
+	text?: string;
+	originalContentUrl?: string;
+	previewImageUrl?: string;
+}
+
 // Durable Object for Game State
 export class GameStateObject {
 	private state: DurableObjectState;
@@ -264,16 +271,6 @@ export class GameStateObject {
 	}
 }
 
-// Roll Game State
-const rollGames: Record<
-	string,
-	{
-		players: Record<string, number>;
-		maxPlayers: number;
-		startedAt: number;
-	}
-> = {};
-
 // Zodiac mapping
 const zodiacMap: Record<string, string> = {
 	牡羊: 'aries',
@@ -312,6 +309,16 @@ function logDebug(message: string, data?: any) {
 	console.log(`[DEBUG] ${message}`, data ? JSON.stringify(data, null, 2) : '');
 }
 
+function createGameUrl(groupId: string, action: 'get' | 'create' | 'roll', params: Record<string, string> = {}): URL {
+	const url = new URL('http://localhost');
+	url.searchParams.set('groupId', groupId);
+	url.searchParams.set('action', action);
+	Object.entries(params).forEach(([key, value]) => {
+		url.searchParams.set(key, value);
+	});
+	return url;
+}
+
 // Date utilities
 const DateUtils = {
 	getTodayKey(): string {
@@ -329,692 +336,602 @@ const DateUtils = {
 	},
 };
 
-// API Service
-class ApiService {
-	static async fetchRandomImage(): Promise<string | null> {
-		try {
-			logDebug(`Fetching random image from API: ${CONFIG.API.RANDOM_IMAGE}`);
-			const response = await fetch(CONFIG.API.RANDOM_IMAGE);
-			logDebug(`Random image API response status: ${response.status}`);
+// API Functions
+async function fetchRandomImage(): Promise<string | null> {
+	try {
+		logDebug(`Fetching random image from API: ${CONFIG.API.RANDOM_IMAGE}`);
+		const response = await fetch(CONFIG.API.RANDOM_IMAGE);
+		logDebug(`Random image API response status: ${response.status}`);
 
-			const imageData = (await response.json()) as RandomImageResponse;
-			logDebug(`Random image API response data:`, imageData);
+		const imageData = (await response.json()) as RandomImageResponse;
+		logDebug(`Random image API response data:`, imageData);
 
-			if (imageData.code === '200' && imageData.imgurl) {
-				logDebug(`Successfully fetched random image: ${imageData.imgurl}`);
-				return imageData.imgurl;
-			}
-
-			logDebug(`API returned code: ${imageData.code}`);
-			return null;
-		} catch (error) {
-			logDebug(`Error fetching random image:`, error);
-			return null;
+		if (imageData.code === '200' && imageData.imgurl) {
+			logDebug(`Successfully fetched random image: ${imageData.imgurl}`);
+			return imageData.imgurl;
 		}
-	}
 
-	static async sendReply(replyToken: string, text: string, accessToken: string): Promise<void> {
-		await fetch(CONFIG.API.LINE_REPLY, {
-			method: 'POST',
+		logDebug(`API returned code: ${imageData.code}`);
+		return null;
+	} catch (error) {
+		logDebug(`Error fetching random image:`, error);
+		return null;
+	}
+}
+
+async function sendLineMessages(replyToken: string, messages: LineMessage[], accessToken: string): Promise<void> {
+	await fetch(CONFIG.API.LINE_REPLY, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${accessToken}`,
+		},
+		body: JSON.stringify({ replyToken, messages }),
+	});
+}
+
+async function sendReply(replyToken: string, text: string, accessToken: string): Promise<void> {
+	await sendLineMessages(replyToken, [{ type: 'text', text }], accessToken);
+}
+
+async function sendImageReply(replyToken: string, imageUrl: string, accessToken: string): Promise<void> {
+	await sendLineMessages(
+		replyToken,
+		[
+			{
+				type: 'image',
+				originalContentUrl: imageUrl,
+				previewImageUrl: imageUrl,
+			},
+		],
+		accessToken
+	);
+}
+
+async function fetchUserProfile(userId: string, accessToken: string): Promise<string> {
+	try {
+		const response = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
 			headers: {
-				'Content-Type': 'application/json',
 				Authorization: `Bearer ${accessToken}`,
 			},
-			body: JSON.stringify({
-				replyToken,
-				messages: [{ type: 'text', text }],
-			}),
 		});
-	}
 
-	static async sendImageReply(replyToken: string, imageUrl: string, accessToken: string): Promise<void> {
-		await fetch(CONFIG.API.LINE_REPLY, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${accessToken}`,
-			},
-			body: JSON.stringify({
-				replyToken,
-				messages: [
-					{
-						type: 'image',
-						originalContentUrl: imageUrl,
-						previewImageUrl: imageUrl,
-					},
-				],
-			}),
-		});
-	}
-
-	static async fetchUserProfile(userId: string, accessToken: string): Promise<string> {
-		try {
-			const response = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
-				headers: {
-					Authorization: `Bearer ${accessToken}`,
-				},
-			});
-
-			if (!response.ok) {
-				logDebug('Failed to fetch user profile', {
-					userId,
-					status: response.status,
-				});
-				return userId;
-			}
-
-			const profile = (await response.json()) as { displayName: string };
-			return profile.displayName;
-		} catch (error) {
-			logDebug('Error fetching user profile', {
+		if (!response.ok) {
+			logDebug('Failed to fetch user profile', {
 				userId,
-				error,
+				status: response.status,
 			});
 			return userId;
 		}
+
+		const profile = (await response.json()) as { displayName: string };
+		return profile.displayName;
+	} catch (error) {
+		logDebug('Error fetching user profile', {
+			userId,
+			error,
+		});
+		return userId;
 	}
+}
 
-	static async fetchGroupMemberProfile(userId: string, groupId: string, accessToken: string): Promise<string> {
-		try {
-			const response = await fetch(`https://api.line.me/v2/bot/group/${groupId}/member/${userId}`, {
-				headers: {
-					Authorization: `Bearer ${accessToken}`,
-				},
-			});
+async function fetchGroupMemberProfile(userId: string, groupId: string, accessToken: string): Promise<string> {
+	try {
+		const response = await fetch(`https://api.line.me/v2/bot/group/${groupId}/member/${userId}`, {
+			headers: {
+				Authorization: `Bearer ${accessToken}`,
+			},
+		});
 
-			if (!response.ok) {
-				logDebug('Failed to fetch group member profile', {
-					userId,
-					groupId,
-					status: response.status,
-				});
-				return userId;
-			}
-
-			const profile = (await response.json()) as { displayName: string };
-			return profile.displayName;
-		} catch (error) {
-			logDebug('Error fetching group member profile', {
+		if (!response.ok) {
+			logDebug('Failed to fetch group member profile', {
 				userId,
 				groupId,
-				error,
+				status: response.status,
 			});
 			return userId;
 		}
-	}
-}
 
-// Horoscope Service
-class HoroscopeService {
-	static async fetchHoroscopeData(zodiacEn: string): Promise<HoroscopeData | null> {
-		const apiUrl = `${CONFIG.API.HOROSCOPE}?type=${zodiacEn}&time=today`;
-
-		try {
-			logDebug('Fetching horoscope data', { zodiacEn, apiUrl });
-			const response = await fetch(apiUrl);
-			logDebug('Horoscope API response status', { status: response.status });
-
-			const horoscope = (await response.json()) as { success: boolean; data: HoroscopeData };
-			if (horoscope.success && horoscope.data) {
-				logDebug('Successfully fetched horoscope data', { zodiacEn });
-				return horoscope.data;
-			}
-
-			logDebug('Failed to fetch horoscope data', {
-				zodiacEn,
-				success: horoscope.success,
-				hasData: !!horoscope.data,
-			});
-			return null;
-		} catch (error) {
-			logDebug('Error fetching horoscope data', { zodiacEn, error });
-			return null;
-		}
-	}
-
-	static async getCachedHoroscope(kv: KVNamespace, zodiacKey: string): Promise<CachedHoroscope | null> {
-		const todayKey = DateUtils.getTodayKey();
-		const cacheKey = `${todayKey}_${zodiacKey}`;
-
-		try {
-			const cached = await kv.get(cacheKey);
-			if (cached) {
-				const parsed = JSON.parse(cached) as CachedHoroscope;
-				logDebug('Cache hit for horoscope', { zodiacKey });
-				return parsed;
-			}
-
-			logDebug('Cache miss for horoscope', { zodiacKey });
-			return null;
-		} catch (error) {
-			logDebug('Error getting cached horoscope', { zodiacKey, error });
-			return null;
-		}
-	}
-
-	static async cacheHoroscope(kv: KVNamespace, zodiacKey: string, data: HoroscopeData): Promise<void> {
-		const todayKey = DateUtils.getTodayKey();
-		const cacheKey = `${todayKey}_${zodiacKey}`;
-
-		const cachedData: CachedHoroscope = {
-			data,
-			cachedAt: new Date().toISOString(),
-		};
-
-		try {
-			await kv.put(cacheKey, JSON.stringify(cachedData), {
-				expirationTtl: CONFIG.CACHE.EXPIRATION,
-			});
-			logDebug('Cached horoscope data', { zodiacKey });
-		} catch (error) {
-			logDebug('Error caching horoscope data', { zodiacKey, error });
-		}
-	}
-
-	static async preloadAllHoroscopes(kv: KVNamespace): Promise<void> {
-		logDebug('Starting horoscope preload');
-
-		const allZodiacs = Object.keys(zodiacMap);
-		const uniqueZodiacEns = [...new Set(Object.values(zodiacMap))];
-
-		logDebug('Preloading horoscopes', { uniqueZodiacEns });
-
-		for (const zodiacEn of uniqueZodiacEns) {
-			try {
-				logDebug('Preloading horoscope', { zodiacEn });
-				const data = await this.fetchHoroscopeData(zodiacEn);
-
-				if (data) {
-					const zodiacKeys = allZodiacs.filter((key) => zodiacMap[key] === zodiacEn);
-					logDebug('Caching horoscope data', { zodiacEn, zodiacKeys });
-
-					for (const key of zodiacKeys) {
-						await this.cacheHoroscope(kv, key, data);
-					}
-
-					logDebug('Successfully preloaded horoscope', { zodiacEn });
-				} else {
-					logDebug('Failed to fetch horoscope data', { zodiacEn });
-				}
-			} catch (error) {
-				logDebug('Error preloading horoscope', { zodiacEn, error });
-			}
-		}
-
-		logDebug('Completed horoscope preload');
-	}
-
-	static findZodiacMatch(text: string): string | undefined {
-		// 正規化文字（處理 Unicode 變體）
-		const normalizedText = text.normalize('NFKC');
-
-		// 檢查文字長度，只有2個字或3個字才進行匹配
-		if (normalizedText.length < 2 || normalizedText.length > 3) {
-			return undefined;
-		}
-
-		// 嘗試各種匹配方法
-		const exactMatch = Object.keys(zodiacMap).find((z) => normalizedText === z || normalizedText === z + '座');
-		if (exactMatch) {
-			return exactMatch;
-		}
-
-		const textWithoutSeat = normalizedText.endsWith('座') ? normalizedText.slice(0, -1) : normalizedText;
-		const matchWithoutSeat = Object.keys(zodiacMap).find((z) => textWithoutSeat === z);
-		if (matchWithoutSeat) {
-			return matchWithoutSeat;
-		}
-
-		const fuzzyMatch = Object.keys(zodiacMap).find((z) => normalizedText.includes(z));
-		if (fuzzyMatch) {
-			return fuzzyMatch;
-		}
-
-		return undefined;
-	}
-}
-
-// Roll Game Service
-class RollGameService {
-	static async handleRollCommand(
-		groupId: string,
-		userId: string,
-		replyToken: string,
-		text: string,
-		accessToken: string,
-		env: Env
-	): Promise<void> {
-		// 先將全形符號轉換為半形符號
-		const normalizedText = text.replace(/[！]/g, '!');
-
-		logDebug('Starting roll command handling', {
-			originalText: text,
-			normalizedText,
+		const profile = (await response.json()) as { displayName: string };
+		return profile.displayName;
+	} catch (error) {
+		logDebug('Error fetching group member profile', {
 			userId,
 			groupId,
+			error,
 		});
+		return userId;
+	}
+}
 
-		if (normalizedText.startsWith('!rollnum')) {
-			logDebug('Detected !rollnum command');
-			return this.handleRollNum(groupId, replyToken, normalizedText, accessToken, env);
-		} else if (normalizedText === '!roll') {
-			logDebug('Detected !roll command');
-			return this.handleRoll(groupId, userId, replyToken, accessToken, env);
-		} else {
-			logDebug('Unknown roll command format', { text: normalizedText });
-			return ApiService.sendReply(replyToken, '未知的指令格式', accessToken);
+// Horoscope Functions
+async function fetchHoroscopeData(zodiacEn: string): Promise<HoroscopeData | null> {
+	const apiUrl = `${CONFIG.API.HOROSCOPE}?type=${zodiacEn}&time=today`;
+
+	try {
+		logDebug('Fetching horoscope data', { zodiacEn, apiUrl });
+		const response = await fetch(apiUrl);
+		logDebug('Horoscope API response status', { status: response.status });
+
+		const horoscope = (await response.json()) as { success: boolean; data: HoroscopeData };
+		if (horoscope.success && horoscope.data) {
+			logDebug('Successfully fetched horoscope data', { zodiacEn });
+			return horoscope.data;
+		}
+
+		logDebug('Failed to fetch horoscope data', {
+			zodiacEn,
+			success: horoscope.success,
+			hasData: !!horoscope.data,
+		});
+		return null;
+	} catch (error) {
+		logDebug('Error fetching horoscope data', { zodiacEn, error });
+		return null;
+	}
+}
+
+async function getCachedHoroscope(kv: KVNamespace, zodiacKey: string): Promise<CachedHoroscope | null> {
+	const todayKey = DateUtils.getTodayKey();
+	const cacheKey = `${todayKey}_${zodiacKey}`;
+
+	try {
+		const cached = await kv.get(cacheKey);
+		if (cached) {
+			const parsed = JSON.parse(cached) as CachedHoroscope;
+			logDebug('Cache hit for horoscope', { zodiacKey });
+			return parsed;
+		}
+
+		logDebug('Cache miss for horoscope', { zodiacKey });
+		return null;
+	} catch (error) {
+		logDebug('Error getting cached horoscope', { zodiacKey, error });
+		return null;
+	}
+}
+
+async function cacheHoroscope(kv: KVNamespace, zodiacKey: string, data: HoroscopeData): Promise<void> {
+	const todayKey = DateUtils.getTodayKey();
+	const cacheKey = `${todayKey}_${zodiacKey}`;
+
+	const cachedData: CachedHoroscope = {
+		data,
+		cachedAt: new Date().toISOString(),
+	};
+
+	try {
+		await kv.put(cacheKey, JSON.stringify(cachedData), {
+			expirationTtl: CONFIG.CACHE.EXPIRATION,
+		});
+		logDebug('Cached horoscope data', { zodiacKey });
+	} catch (error) {
+		logDebug('Error caching horoscope data', { zodiacKey, error });
+	}
+}
+
+async function preloadAllHoroscopes(kv: KVNamespace): Promise<void> {
+	logDebug('Starting horoscope preload');
+
+	const allZodiacs = Object.keys(zodiacMap);
+	const uniqueZodiacEns = [...new Set(Object.values(zodiacMap))];
+
+	logDebug('Preloading horoscopes', { uniqueZodiacEns });
+
+	for (const zodiacEn of uniqueZodiacEns) {
+		try {
+			logDebug('Preloading horoscope', { zodiacEn });
+			const data = await fetchHoroscopeData(zodiacEn);
+
+			if (data) {
+				const zodiacKeys = allZodiacs.filter((key) => zodiacMap[key] === zodiacEn);
+				logDebug('Caching horoscope data', { zodiacEn, zodiacKeys });
+
+				for (const key of zodiacKeys) {
+					await cacheHoroscope(kv, key, data);
+				}
+
+				logDebug('Successfully preloaded horoscope', { zodiacEn });
+			} else {
+				logDebug('Failed to fetch horoscope data', { zodiacEn });
+			}
+		} catch (error) {
+			logDebug('Error preloading horoscope', { zodiacEn, error });
 		}
 	}
 
-	private static async handleRollNum(groupId: string, replyToken: string, text: string, accessToken: string, env: Env): Promise<void> {
-		logDebug('Processing !rollnum command', { groupId });
+	logDebug('Completed horoscope preload');
+}
 
-		// First check if there's an active game
+function findZodiacMatch(text: string): string | undefined {
+	// 正規化文字（處理 Unicode 變體）
+	const normalizedText = text.normalize('NFKC');
+
+	// 檢查文字長度，只有2個字或3個字才進行匹配
+	if (normalizedText.length < 2 || normalizedText.length > 3) {
+		return undefined;
+	}
+
+	// 嘗試各種匹配方法
+	const exactMatch = Object.keys(zodiacMap).find((z) => normalizedText === z || normalizedText === z + '座');
+	if (exactMatch) {
+		return exactMatch;
+	}
+
+	const textWithoutSeat = normalizedText.endsWith('座') ? normalizedText.slice(0, -1) : normalizedText;
+	const matchWithoutSeat = Object.keys(zodiacMap).find((z) => textWithoutSeat === z);
+	if (matchWithoutSeat) {
+		return matchWithoutSeat;
+	}
+
+	const fuzzyMatch = Object.keys(zodiacMap).find((z) => normalizedText.includes(z));
+	if (fuzzyMatch) {
+		return fuzzyMatch;
+	}
+
+	return undefined;
+}
+
+// Roll Game Functions
+async function handleRollCommand(
+	groupId: string,
+	userId: string,
+	replyToken: string,
+	text: string,
+	accessToken: string,
+	env: Env
+): Promise<void> {
+	// 先將全形符號轉換為半形符號
+	const normalizedText = text.replace(/[！]/g, '!');
+
+	logDebug('Starting roll command handling', {
+		originalText: text,
+		normalizedText,
+		userId,
+		groupId,
+	});
+
+	if (normalizedText.startsWith('!rollnum')) {
+		logDebug('Detected !rollnum command');
+		return handleRollNum(groupId, replyToken, normalizedText, accessToken, env);
+	} else if (normalizedText === '!roll') {
+		logDebug('Detected !roll command');
+		return handleRoll(groupId, userId, replyToken, accessToken, env);
+	} else {
+		logDebug('Unknown roll command format', { text: normalizedText });
+		return sendReply(replyToken, '未知的指令格式', accessToken);
+	}
+}
+
+async function handleRollNum(groupId: string, replyToken: string, text: string, accessToken: string, env: Env): Promise<void> {
+	logDebug('Processing !rollnum command', { groupId });
+
+	// First check if there's an active game
+	const id = env.GAME_STATE.idFromName(groupId);
+	const obj = env.GAME_STATE.get(id);
+
+	const resp = await obj.fetch(createGameUrl(groupId, 'get'));
+	const responseText = await resp.text();
+	const game = resp.ok && responseText ? (JSON.parse(responseText) as GameState) : null;
+
+	if (game) {
+		logDebug('Active game found when trying to create new game', { groupId });
+		await sendReply(replyToken, '還有正在進行中的比大小，先比完好嗎 親 ~~', accessToken);
+		return;
+	}
+
+	const parts = text.split(' ');
+	logDebug('Command parts', { parts });
+
+	if (parts.length !== 2) {
+		logDebug('Invalid !rollnum format - wrong number of parts');
+		await sendReply(replyToken, '請輸入正確格式，例如 !rollnum 3 (2~10人)', accessToken);
+		return;
+	}
+
+	const num = parseInt(parts[1]);
+	logDebug('Parsed player count', { num, rawInput: parts[1] });
+
+	if (isNaN(num) || num < 2 || num > CONFIG.ROLL.MAX_PLAYERS) {
+		logDebug('Invalid player count', { num });
+		await sendReply(replyToken, '請輸入正確人數，例如 !rollnum 3 (2~10人)', accessToken);
+		return;
+	}
+
+	const createResp = await obj.fetch(createGameUrl(groupId, 'create', { maxPlayers: num.toString() }));
+	if (!createResp.ok) {
+		logDebug('Failed to create game', { status: createResp.status });
+		await sendReply(replyToken, '建立遊戲失敗，請稍後再試', accessToken);
+		return;
+	}
+
+	logDebug('Created new game', { groupId, maxPlayers: num });
+	await sendReply(replyToken, '請依序輸入 !roll 會自動記錄比對，超過30分鐘沒比完的會自動關閉。', accessToken);
+}
+
+async function handleRoll(groupId: string, userId: string, replyToken: string, accessToken: string, env: Env): Promise<void> {
+	try {
+		logDebug('Starting handleRoll', { groupId, userId, replyToken });
+
 		const id = env.GAME_STATE.idFromName(groupId);
 		const obj = env.GAME_STATE.get(id);
 
-		// 使用 URL 來處理請求參數
-		const getUrl = new URL('http://localhost');
-		getUrl.searchParams.set('groupId', groupId);
-		getUrl.searchParams.set('action', 'get');
+		// First check if game exists
+		let resp = await obj.fetch(createGameUrl(groupId, 'get'));
+		logDebug('Get game response', { status: resp.status, ok: resp.ok });
 
-		const resp = await obj.fetch(getUrl);
-		const responseText = await resp.text();
+		let responseText = await resp.text();
+		logDebug('Get game response text', { responseText });
+
 		const game = resp.ok && responseText ? (JSON.parse(responseText) as GameState) : null;
+		logDebug('Parsed game state', { game });
 
-		if (game) {
-			logDebug('Active game found when trying to create new game', { groupId });
-			await ApiService.sendReply(replyToken, '還有正在進行中的比大小，先比完好嗎 親 ~~', accessToken);
+		if (!game) {
+			logDebug('No active game found', { groupId });
+			await sendReply(replyToken, '還沒有進行中的比大小，請先輸入 !rollnum {人數}，例如 !rollnum 3', accessToken);
 			return;
 		}
 
-		const parts = text.split(' ');
-		logDebug('Command parts', { parts });
+		// Try to roll
+		resp = await obj.fetch(createGameUrl(groupId, 'roll', { userId }));
+		logDebug('Roll response', { status: resp.status, ok: resp.ok });
 
-		if (parts.length !== 2) {
-			logDebug('Invalid !rollnum format - wrong number of parts');
-			await ApiService.sendReply(replyToken, '請輸入正確格式，例如 !rollnum 3 (2~10人)', accessToken);
+		if (!resp.ok) {
+			const error = await resp.text();
+			logDebug('Roll error response', { error });
+
+			const errorMessages = {
+				'Game is full': '參加人數已滿，無法加入',
+				'Already rolled': '你已經骰過了！',
+			};
+
+			await sendReply(replyToken, errorMessages[error as keyof typeof errorMessages] || '骰子失敗，請稍後再試', accessToken);
 			return;
 		}
 
-		const num = parseInt(parts[1]);
-		logDebug('Parsed player count', { num, rawInput: parts[1] });
+		responseText = await resp.text();
+		const result = JSON.parse(responseText) as RollResponse;
+		logDebug('Roll result', {
+			groupId,
+			userId,
+			point: result.point,
+			isComplete: result.isComplete,
+			players: result.players,
+		});
 
-		if (isNaN(num) || num < 2 || num > CONFIG.ROLL.MAX_PLAYERS) {
-			logDebug('Invalid player count', { num });
-			await ApiService.sendReply(replyToken, '請輸入正確人數，例如 !rollnum 3 (2~10人)', accessToken);
-			return;
-		}
+		// 獲取用戶名稱
+		const displayName = await fetchGroupMemberProfile(userId, groupId, accessToken);
 
-		const url = new URL('http://localhost');
-		url.searchParams.set('groupId', groupId);
-		url.searchParams.set('action', 'create');
-		url.searchParams.set('maxPlayers', num.toString());
+		if (result.isComplete) {
+			logDebug('Game complete, preparing final results', { groupId, players: result.players });
 
-		const createResp = await obj.fetch(url);
-		if (!createResp.ok) {
-			logDebug('Failed to create game', { status: createResp.status });
-			await ApiService.sendReply(replyToken, '建立遊戲失敗，請稍後再試', accessToken);
-			return;
-		}
+			try {
+				// 獲取所有玩家的名稱
+				const playerNames = await Promise.all(Object.keys(result.players).map((id) => fetchGroupMemberProfile(id, groupId, accessToken)));
 
-		logDebug('Created new game', { groupId, maxPlayers: num });
-		await ApiService.sendReply(replyToken, '請依序輸入 !roll 會自動記錄比對，超過30分鐘沒比完的會自動關閉。', accessToken);
-	}
+				const playerMap = Object.fromEntries(Object.keys(result.players).map((id, index) => [id, playerNames[index]]));
+				const results = Object.entries(result.players)
+					.map(([id, score]) => `${playerMap[id]} : ${score} 點`)
+					.join('\n');
 
-	private static async handleRoll(groupId: string, userId: string, replyToken: string, accessToken: string, env: Env): Promise<void> {
-		try {
-			logDebug('Starting handleRoll', {
-				groupId,
-				userId,
-				replyToken,
-			});
+				const winner = Object.entries(result.players).sort((a, b) => b[1] - a[1])[0][0];
 
-			const id = env.GAME_STATE.idFromName(groupId);
-			const obj = env.GAME_STATE.get(id);
+				// 在一次回覆中發送兩條訊息
+				await sendLineMessages(
+					replyToken,
+					[
+						{ type: 'text', text: `${displayName}骰出 : ${result.point} 點` },
+						{ type: 'text', text: `${results}\n獲勝者為 : ${playerMap[winner]}` },
+					],
+					accessToken
+				);
 
-			// First check if game exists
-			const getUrl = new URL('http://localhost');
-			getUrl.searchParams.set('groupId', groupId);
-			getUrl.searchParams.set('action', 'get');
-
-			let resp = await obj.fetch(getUrl);
-			logDebug('Get game response', {
-				status: resp.status,
-				ok: resp.ok,
-			});
-
-			let responseText = await resp.text();
-			logDebug('Get game response text', { responseText });
-
-			const game = resp.ok && responseText ? (JSON.parse(responseText) as GameState) : null;
-			logDebug('Parsed game state', { game });
-
-			if (!game) {
-				logDebug('No active game found', { groupId });
-				await ApiService.sendReply(replyToken, '還沒有進行中的比大小，請先輸入 !rollnum {人數}，例如 !rollnum 3', accessToken);
-				return;
+				logDebug('Final results sent successfully', { groupId, results, winner: playerMap[winner] });
+			} catch (error) {
+				logDebug('Error sending final results', { error, groupId });
+				// 如果發送完整結果失敗，至少發送當前玩家的結果
+				await sendReply(replyToken, `${displayName}骰出 : ${result.point} 點`, accessToken);
 			}
-
-			// Try to roll
-			const rollUrl = new URL('http://localhost');
-			rollUrl.searchParams.set('groupId', groupId);
-			rollUrl.searchParams.set('action', 'roll');
-			rollUrl.searchParams.set('userId', userId);
-
-			logDebug('Sending roll request', {
-				url: rollUrl.toString(),
-				params: {
-					groupId,
-					action: 'roll',
-					userId,
-				},
-			});
-
-			resp = await obj.fetch(rollUrl);
-			logDebug('Roll response', {
-				status: resp.status,
-				ok: resp.ok,
-			});
-
-			if (!resp.ok) {
-				const error = await resp.text();
-				logDebug('Roll error response', { error });
-
-				if (error === 'Game is full') {
-					await ApiService.sendReply(replyToken, '參加人數已滿，無法加入', accessToken);
-				} else if (error === 'Already rolled') {
-					await ApiService.sendReply(replyToken, '你已經骰過了！', accessToken);
-				} else {
-					await ApiService.sendReply(replyToken, '骰子失敗，請稍後再試', accessToken);
-				}
-				return;
-			}
-
-			responseText = await resp.text();
-			logDebug('Roll response text', { responseText });
-
-			const result = JSON.parse(responseText) as RollResponse;
-			logDebug('Roll result', {
-				groupId,
-				userId,
-				point: result.point,
-				isComplete: result.isComplete,
-				players: result.players,
-			});
-
-			// 獲取用戶名稱
-			const displayName = await ApiService.fetchGroupMemberProfile(userId, groupId, accessToken);
-
-			if (result.isComplete) {
-				logDebug('Game complete, preparing final results', {
-					groupId,
-					players: result.players,
-				});
-
-				try {
-					// 獲取所有玩家的名稱
-					const playerNames = await Promise.all(
-						Object.keys(result.players).map((id) => ApiService.fetchGroupMemberProfile(id, groupId, accessToken))
-					);
-
-					const playerMap = Object.fromEntries(Object.keys(result.players).map((id, index) => [id, playerNames[index]]));
-
-					const results = Object.entries(result.players)
-						.map(([id, score]) => `${playerMap[id]} : ${score} 點`)
-						.join('\n');
-
-					const winner = Object.entries(result.players).sort((a, b) => b[1] - a[1])[0][0];
-
-					// 在一次回覆中發送兩條訊息
-					await fetch(CONFIG.API.LINE_REPLY, {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-							Authorization: `Bearer ${accessToken}`,
-						},
-						body: JSON.stringify({
-							replyToken,
-							messages: [
-								{
-									type: 'text',
-									text: `${displayName}骰出 : ${result.point} 點`,
-								},
-								{
-									type: 'text',
-									text: `${results}\n獲勝者為 : ${playerMap[winner]}`,
-								},
-							],
-						}),
-					});
-
-					logDebug('Final results sent successfully', {
-						groupId,
-						results,
-						winner: playerMap[winner],
-					});
-				} catch (error) {
-					logDebug('Error sending final results', {
-						error,
-						groupId,
-					});
-					// 如果發送完整結果失敗，至少發送當前玩家的結果
-					await ApiService.sendReply(replyToken, `${displayName}骰出 : ${result.point} 點`, accessToken);
-				}
-			} else {
-				// 如果遊戲還沒結束，只發送當前玩家的結果
-				await ApiService.sendReply(replyToken, `${displayName}骰出 : ${result.point} 點`, accessToken);
-			}
-		} catch (error) {
-			logDebug('Error in handleRoll', {
-				error,
-				errorMessage: error instanceof Error ? error.message : 'Unknown error',
-				errorStack: error instanceof Error ? error.stack : undefined,
-				groupId,
-				userId,
-			});
-			await ApiService.sendReply(replyToken, '處理命令時發生錯誤', accessToken);
+		} else {
+			// 如果遊戲還沒結束，只發送當前玩家的結果
+			await sendReply(replyToken, `${displayName}骰出 : ${result.point} 點`, accessToken);
 		}
+	} catch (error) {
+		logDebug('Error in handleRoll', {
+			error,
+			errorMessage: error instanceof Error ? error.message : 'Unknown error',
+			errorStack: error instanceof Error ? error.stack : undefined,
+			groupId,
+			userId,
+		});
+		await sendReply(replyToken, '處理命令時發生錯誤', accessToken);
 	}
 }
 
-// Message Handler Service
-class MessageHandlerService {
-	private readonly env: Env;
-	private converter: Promise<(text: string) => Promise<string>> | null = null;
+// Message Handler Functions
+let converter: Promise<(text: string) => Promise<string>> | null = null;
 
-	constructor(env: Env) {
-		this.env = env;
+async function getConverter(): Promise<(text: string) => Promise<string>> {
+	if (!converter) {
+		converter = OpenCC.Converter({ from: 'cn', to: 'tw' });
 	}
+	return converter;
+}
 
-	private async getConverter(): Promise<(text: string) => Promise<string>> {
-		if (!this.converter) {
-			this.converter = OpenCC.Converter({ from: 'cn', to: 'tw' });
-		}
-		return this.converter;
-	}
+async function handleMessage(event: LineEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+	try {
+		logDebug('Starting message processing', { event });
 
-	async handleMessage(event: LineEvent, ctx: ExecutionContext): Promise<void> {
-		try {
-			logDebug('Starting message processing', { event });
-
-			if (event.type !== 'message' || event.message?.type !== 'text' || !event.replyToken) {
-				logDebug('Invalid message type or missing replyToken', { type: event.type, messageType: event.message?.type });
-				return;
-			}
-
-			const text = event.message.text.trim();
-			logDebug('Processing message', { text });
-
-			// 先檢查是否為命令
-			const isCmd = this.isCommand(text);
-			logDebug('Command check result', { text, isCommand: isCmd });
-
-			if (isCmd) {
-				logDebug('Handling command', { text });
-				await this.handleCommand(event, ctx);
-				return;
-			}
-
-			logDebug('Processing as normal message', { text });
-			// 處理一般文本
-			await this.handleNormalMessage(text, event.replyToken, ctx);
-		} catch (error) {
-			logDebug('Error in handleMessage', { error });
-		}
-	}
-
-	private isCommand(text: string): boolean {
-		// 先將全形符號轉換為半形符號
-		const normalizedText = text.replace(/[！]/g, '!');
-
-		const isRoll = normalizedText === '!roll';
-		const isRollNum = normalizedText.startsWith('!rollnum');
-		const isDraw = normalizedText === '抽';
-		const result = isRoll || isRollNum || isDraw;
-
-		logDebug('Command detection', {
-			originalText: text,
-			normalizedText,
-			isRoll,
-			isRollNum,
-			isDraw,
-			result,
-		});
-
-		return result;
-	}
-
-	private async handleCommand(event: LineEvent, ctx: ExecutionContext): Promise<void> {
-		const text = event.message!.text.trim();
-		// 先將全形符號轉換為半形符號
-		const normalizedText = text.replace(/[！]/g, '!');
-		logDebug('Starting command handling', { text, normalizedText });
-
-		// 處理遊戲命令
-		if (normalizedText === '!roll' || normalizedText.startsWith('!rollnum')) {
-			logDebug('Detected game command', { normalizedText });
-			await this.handleGameCommand(event, ctx);
+		if (event.type !== 'message' || event.message?.type !== 'text' || !event.replyToken) {
+			logDebug('Invalid message type or missing replyToken', { type: event.type, messageType: event.message?.type });
 			return;
 		}
 
-		// 處理「抽」命令
-		if (text === '抽') {
-			logDebug('Detected draw command');
-			await this.handleRandomImage(event.replyToken!);
+		const text = event.message.text.trim();
+		logDebug('Processing message', { text });
+
+		// 先檢查是否為命令
+		const isCmd = isCommand(text);
+		logDebug('Command check result', { text, isCommand: isCmd });
+
+		if (isCmd) {
+			logDebug('Handling command', { text });
+			await handleCommand(event, env, ctx);
 			return;
 		}
 
-		logDebug('No matching command handler found', { normalizedText });
+		logDebug('Processing as normal message', { text });
+		// 處理一般文本
+		await handleNormalMessage(text, event.replyToken, env, ctx);
+	} catch (error) {
+		logDebug('Error in handleMessage', { error });
+	}
+}
+
+function isCommand(text: string): boolean {
+	// 先將全形符號轉換為半形符號
+	const normalizedText = text.replace(/[！]/g, '!');
+
+	const isRoll = normalizedText === '!roll';
+	const isRollNum = normalizedText.startsWith('!rollnum');
+	const isDraw = normalizedText === '抽';
+	const result = isRoll || isRollNum || isDraw;
+
+	logDebug('Command detection', {
+		originalText: text,
+		normalizedText,
+		isRoll,
+		isRollNum,
+		isDraw,
+		result,
+	});
+
+	return result;
+}
+
+async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+	const text = event.message!.text.trim();
+	// 先將全形符號轉換為半形符號
+	const normalizedText = text.replace(/[！]/g, '!');
+	logDebug('Starting command handling', { text, normalizedText });
+
+	// 處理遊戲命令
+	if (normalizedText === '!roll' || normalizedText.startsWith('!rollnum')) {
+		logDebug('Detected game command', { normalizedText });
+		await handleGameCommand(event, env, ctx);
+		return;
 	}
 
-	private async handleGameCommand(event: LineEvent, ctx: ExecutionContext): Promise<void> {
-		logDebug('Starting game command handling', {
-			event,
+	// 處理「抽」命令
+	if (text === '抽') {
+		logDebug('Detected draw command');
+		await handleRandomImage(event.replyToken!, env);
+		return;
+	}
+
+	logDebug('No matching command handler found', { normalizedText });
+}
+
+async function handleGameCommand(event: LineEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+	logDebug('Starting game command handling', {
+		event,
+		groupId: event.source?.groupId,
+		userId: event.source?.userId,
+		messageText: event.message?.text,
+	});
+
+	if (!event.source?.groupId || !event.source?.userId) {
+		logDebug('Command requires group context and user ID', {
 			groupId: event.source?.groupId,
 			userId: event.source?.userId,
-			messageText: event.message?.text,
+			source: event.source,
+		});
+		await sendReply(event.replyToken!, '此命令只能在群組中使用', env.LINE_CHANNEL_ACCESS_TOKEN);
+		return;
+	}
+
+	try {
+		const text = event.message!.text.trim();
+		logDebug('Processing game command', {
+			command: text,
+			groupId: event.source.groupId,
+			userId: event.source.userId,
+			source: event.source,
 		});
 
-		if (!event.source?.groupId || !event.source?.userId) {
-			logDebug('Command requires group context and user ID', {
-				groupId: event.source?.groupId,
-				userId: event.source?.userId,
-				source: event.source,
-			});
-			await ApiService.sendReply(event.replyToken!, '此命令只能在群組中使用', this.env.LINE_CHANNEL_ACCESS_TOKEN);
-			return;
+		await handleRollCommand(event.source.groupId, event.source.userId, event.replyToken!, text, env.LINE_CHANNEL_ACCESS_TOKEN, env);
+		logDebug('Game command processed successfully');
+	} catch (error) {
+		logDebug('Error processing game command', { error });
+		await sendReply(event.replyToken!, '處理命令時發生錯誤', env.LINE_CHANNEL_ACCESS_TOKEN);
+	}
+}
+
+async function handleNormalMessage(text: string, replyToken: string, env: Env, ctx: ExecutionContext): Promise<void> {
+	try {
+		// 檢查星座匹配
+		const match = findZodiacMatch(text);
+		if (match) {
+			logDebug('Found zodiac match', { match });
+			await handleHoroscope(match, replyToken, env, ctx);
 		}
+	} catch (error) {
+		logDebug('Error handling normal message', { error });
+	}
+}
 
-		try {
-			const text = event.message!.text.trim();
-			logDebug('Processing game command', {
-				command: text,
-				groupId: event.source.groupId,
-				userId: event.source.userId,
-				source: event.source,
-			});
+async function handleRandomImage(replyToken: string, env: Env): Promise<void> {
+	logDebug('Handling random image request');
+	const imageUrl = await fetchRandomImage();
+	if (imageUrl) {
+		await sendImageReply(replyToken, imageUrl, env.LINE_CHANNEL_ACCESS_TOKEN);
+	}
+}
 
-			await RollGameService.handleRollCommand(
-				event.source.groupId,
-				event.source.userId,
-				event.replyToken!,
-				text,
-				this.env.LINE_CHANNEL_ACCESS_TOKEN,
-				this.env
-			);
-			logDebug('Game command processed successfully');
-		} catch (error) {
-			logDebug('Error processing game command', { error });
-			await ApiService.sendReply(event.replyToken!, '處理命令時發生錯誤', this.env.LINE_CHANNEL_ACCESS_TOKEN);
+async function handleHoroscope(zodiacKey: string, replyToken: string, env: Env, ctx: ExecutionContext): Promise<void> {
+	let data: HoroscopeData | null = null;
+	const cachedData = await getCachedHoroscope(env.HOROSCOPE_CACHE, zodiacKey);
+
+	if (cachedData) {
+		logDebug('Using cached horoscope data', { zodiacKey });
+		data = cachedData.data;
+	} else {
+		// 快取未命中時，直接獲取單個星座的資料
+		logDebug('Cache miss, fetching individual horoscope', { zodiacKey });
+		const zodiacEn = zodiacMap[zodiacKey];
+		data = await fetchHoroscopeData(zodiacEn);
+
+		if (data) {
+			await cacheHoroscope(env.HOROSCOPE_CACHE, zodiacKey, data);
+			// 在背景預加載其他星座資料
+			ctx.waitUntil(preloadAllHoroscopes(env.HOROSCOPE_CACHE));
 		}
 	}
 
-	private async handleNormalMessage(text: string, replyToken: string, ctx: ExecutionContext): Promise<void> {
-		try {
-			// 檢查星座匹配
-			const match = HoroscopeService.findZodiacMatch(text);
-			if (match) {
-				logDebug('Found zodiac match', { match });
-				await this.handleHoroscope(match, replyToken, ctx);
-			}
-		} catch (error) {
-			logDebug('Error handling normal message', { error });
-		}
+	if (!data) {
+		logDebug('No horoscope data available', { zodiacKey });
+		return;
 	}
 
-	private async handleRandomImage(replyToken: string): Promise<void> {
-		logDebug('Handling random image request');
-		const imageUrl = await ApiService.fetchRandomImage();
-		if (imageUrl) {
-			await ApiService.sendImageReply(replyToken, imageUrl, this.env.LINE_CHANNEL_ACCESS_TOKEN);
-		}
-	}
+	const replyText = await formatHoroscopeReply(data, zodiacKey);
+	await sendReply(replyToken, replyText, env.LINE_CHANNEL_ACCESS_TOKEN);
+}
 
-	private async handleHoroscope(zodiacKey: string, replyToken: string, ctx: ExecutionContext): Promise<void> {
-		let data: HoroscopeData | null = null;
-		const cachedData = await HoroscopeService.getCachedHoroscope(this.env.HOROSCOPE_CACHE, zodiacKey);
+async function formatHoroscopeReply(data: HoroscopeData, zodiacKey: string): Promise<string> {
+	const converter = await getConverter();
+	const loveText = truncateToFirstPeriod(await converter(data.fortunetext.love));
+	const workText = truncateToFirstPeriod(await converter(data.fortunetext.work));
+	const moneyText = truncateToFirstPeriod(await converter(data.fortunetext.money));
+	const healthText = truncateToFirstPeriod(await converter(data.fortunetext.health));
+	const luckyColor = await converter(data.luckycolor);
 
-		if (cachedData) {
-			logDebug('Using cached horoscope data', { zodiacKey });
-			data = cachedData.data;
-		} else {
-			// 快取未命中時，直接獲取單個星座的資料
-			logDebug('Cache miss, fetching individual horoscope', { zodiacKey });
-			const zodiacEn = zodiacMap[zodiacKey];
-			data = await HoroscopeService.fetchHoroscopeData(zodiacEn);
+	const loveStars = stars(data.fortune.love);
+	const workStars = stars(data.fortune.work);
+	const moneyStars = stars(data.fortune.money);
+	const healthStars = stars(data.fortune.health);
+	const todayDate = DateUtils.getTodayDate();
 
-			if (data) {
-				await HoroscopeService.cacheHoroscope(this.env.HOROSCOPE_CACHE, zodiacKey, data);
-				// 在背景預加載其他星座資料
-				ctx.waitUntil(HoroscopeService.preloadAllHoroscopes(this.env.HOROSCOPE_CACHE));
-			}
-		}
-
-		if (!data) {
-			logDebug('No horoscope data available', { zodiacKey });
-			return;
-		}
-
-		const replyText = await this.formatHoroscopeReply(data, zodiacKey);
-		await ApiService.sendReply(replyToken, replyText, this.env.LINE_CHANNEL_ACCESS_TOKEN);
-	}
-
-	private async formatHoroscopeReply(data: HoroscopeData, zodiacKey: string): Promise<string> {
-		const converter = await this.getConverter();
-		const loveText = truncateToFirstPeriod(await converter(data.fortunetext.love));
-		const workText = truncateToFirstPeriod(await converter(data.fortunetext.work));
-		const moneyText = truncateToFirstPeriod(await converter(data.fortunetext.money));
-		const healthText = truncateToFirstPeriod(await converter(data.fortunetext.health));
-		const luckyColor = await converter(data.luckycolor);
-
-		const loveStars = stars(data.fortune.love);
-		const workStars = stars(data.fortune.work);
-		const moneyStars = stars(data.fortune.money);
-		const healthStars = stars(data.fortune.health);
-		const todayDate = DateUtils.getTodayDate();
-
-		return `今日運勢 ( ${todayDate} ) ${zodiacKey}座
+	return `今日運勢 ( ${todayDate} ) ${zodiacKey}座
 愛情運 ${loveStars}
 ${loveText}
 事業運 ${workStars}
@@ -1024,7 +941,6 @@ ${moneyText}
 健康運 ${healthStars}
 ${healthText}
 幸運數字 : ${data.luckynumber}。幸運顏色 : ${luckyColor}`;
-	}
 }
 
 // Main handler
@@ -1035,7 +951,7 @@ export default {
 		// 手動預載端點
 		if (url.pathname === '/preload' && request.method === 'GET') {
 			logDebug('Manual preload triggered');
-			await HoroscopeService.preloadAllHoroscopes(env.HOROSCOPE_CACHE);
+			await preloadAllHoroscopes(env.HOROSCOPE_CACHE);
 			return new Response('Preload completed', { status: 200 });
 		}
 
@@ -1048,13 +964,11 @@ export default {
 			const body = (await request.json()) as { events: LineEvent[] };
 			logDebug('Request body', { body });
 
-			const messageHandler = new MessageHandlerService(env);
-
 			await Promise.all(
 				body.events.map(async (event) => {
 					try {
 						logDebug('Processing event', { event });
-						await messageHandler.handleMessage(event, ctx);
+						await handleMessage(event, env, ctx);
 						logDebug('Event processed successfully');
 					} catch (error) {
 						logDebug('Error processing event', { error });
@@ -1083,7 +997,7 @@ export default {
 		if (utc8Hour === 0) {
 			logDebug('Starting daily horoscope preload');
 			try {
-				await HoroscopeService.preloadAllHoroscopes(env.HOROSCOPE_CACHE);
+				await preloadAllHoroscopes(env.HOROSCOPE_CACHE);
 				logDebug('Daily horoscope preload completed successfully');
 			} catch (error) {
 				logDebug('Error during daily horoscope preload', { error });
