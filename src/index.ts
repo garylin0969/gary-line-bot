@@ -12,7 +12,7 @@ const CONFIG = {
 	API: {
 		RANDOM_GIRL_IMAGE_JSON: 'https://api.vvhan.com/api/avatar/girl?type=json',
 		RANDOM_GIRL_IMAGE: 'https://api.vvhan.com/api/avatar/girl',
-		RANDOM_PORN_IMAGE: 'https://image.anosu.top/pixiv?r18=1&size=small	',
+		RANDOM_PORN_IMAGE: 'https://image.anosu.top/pixiv?r18=1&size=small',
 		LINE_REPLY: 'https://api.line.me/v2/bot/message/reply',
 		HOROSCOPE: 'https://api.vvhan.com/api/horoscope',
 		SEXY_TEXT: 'https://api.vvhan.com/api/text/sexy?type=json',
