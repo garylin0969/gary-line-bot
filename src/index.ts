@@ -20,6 +20,12 @@ const CONFIG = {
 	},
 } as const;
 
+const KEY_WORDS_REPLY = {
+	許雲藏: '空姐今天飛哪？',
+	皓: '現在考到N幾了？',
+	stanley: '勝利爸爸...',
+};
+
 // Types and Interfaces
 interface LineEvent {
 	type: string;
@@ -842,7 +848,8 @@ function isCommand(text: string): boolean {
 	const isSexy = normalizedText === '!騷話' || normalizedText === '!骚话';
 	const isDog = normalizedText === '!舔狗';
 	const isNSFW = text === '色色';
-	const result = isRoll || isRollNum || isDraw || isSexy || isDog || isNSFW;
+	const isKeyWords = Boolean(Object?.keys(KEY_WORDS_REPLY)?.find((key) => normalizedText?.includes(key)));
+	const result = isRoll || isRollNum || isDraw || isSexy || isDog || isNSFW || isKeyWords;
 
 	logDebug('Command detection', {
 		originalText: text,
@@ -853,6 +860,7 @@ function isCommand(text: string): boolean {
 		isSexy,
 		isDog,
 		isNSFW,
+		isKeyWords,
 		result,
 	});
 
@@ -901,6 +909,12 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 		return;
 	}
 
+	// 處理「關鍵字」命令
+	if (Object?.keys(KEY_WORDS_REPLY)?.find((key) => text?.includes(key))) {
+		logDebug('Detected key words command');
+		await sendReply(event.replyToken!, KEY_WORDS_REPLY[text as keyof typeof KEY_WORDS_REPLY], env.LINE_CHANNEL_ACCESS_TOKEN);
+		return;
+	}
 	logDebug('No matching command handler found', { normalizedText });
 }
 
