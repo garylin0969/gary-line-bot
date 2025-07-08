@@ -10,7 +10,9 @@ const CONFIG = {
 		EXPIRATION: 25 * 60 * 60, // 25小時後過期
 	},
 	API: {
-		RANDOM_IMAGE: 'https://api.vvhan.com/api/avatar/girl?type=json',
+		RANDOM_GIRL_IMAGE_JSON: 'https://api.vvhan.com/api/avatar/girl?type=json',
+		RANDOM_GIRL_IMAGE: 'https://api.vvhan.com/api/avatar/girl',
+		RANDOM_PORN_IMAGE: 'https://image.anosu.top/pixiv?r18=1&size=small	',
 		LINE_REPLY: 'https://api.line.me/v2/bot/message/reply',
 		HOROSCOPE: 'https://api.vvhan.com/api/horoscope',
 		SEXY_TEXT: 'https://api.vvhan.com/api/text/sexy?type=json',
@@ -376,8 +378,8 @@ async function fetchText(apiUrl: string): Promise<string | null> {
 
 async function fetchRandomImage(): Promise<string | null> {
 	try {
-		logDebug(`Fetching random image from API: ${CONFIG.API.RANDOM_IMAGE}`);
-		const response = await fetch(CONFIG.API.RANDOM_IMAGE);
+		logDebug(`Fetching random image from API: ${CONFIG.API.RANDOM_GIRL_IMAGE_JSON}`);
+		const response = await fetch(CONFIG.API.RANDOM_GIRL_IMAGE_JSON);
 		logDebug(`Random image API response status: ${response.status}`);
 
 		if (!response.ok) {
@@ -873,7 +875,8 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	// 處理「抽」命令
 	if (text === '抽') {
 		logDebug('Detected draw command');
-		await handleRandomImage(event.replyToken!, env);
+		// await handleRandomImage(event.replyToken!, env); // 隨機圖片JSON版本要打api另外處理
+		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_GIRL_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
 		return;
 	}
 
@@ -894,7 +897,7 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	// 處理「色色」命令
 	if (text === '色色') {
 		logDebug('Detected NSFW command');
-		await sendImageReply(event.replyToken!, 'https://image.anosu.top/pixiv?r18=1&size=small', env.LINE_CHANNEL_ACCESS_TOKEN);
+		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_PORN_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
 		return;
 	}
 
