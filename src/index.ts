@@ -28,6 +28,8 @@ const KEY_WORDS_REPLY = {
 	幹: '好 幹我 幹死我',
 	勝利: '那ㄋ很失敗囉？',
 	又在炫: '炫你嘴裡',
+	靠北: '靠你媽北',
+	這我: '又你了',
 };
 
 // Types and Interfaces
