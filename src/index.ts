@@ -894,7 +894,7 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	// 處理「色色」命令
 	if (text === '色色') {
 		logDebug('Detected NSFW command');
-		await sendImageReply(event.replyToken!, 'https://image.anosu.top/pixiv?r18=1', env.LINE_CHANNEL_ACCESS_TOKEN);
+		await sendImageReply(event.replyToken!, 'https://image.anosu.top/pixiv?r18=1&size=small', env.LINE_CHANNEL_ACCESS_TOKEN);
 		return;
 	}
 
