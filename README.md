@@ -42,7 +42,7 @@ pnpm install
 4. 部署至 Cloudflare Workers
 
 ```bash
-pnpm run deploy
+pnpm wrangler deploy
 ```
 
 ## 指令列表
@@ -51,6 +51,7 @@ pnpm run deploy
 - `!roll`: 骰子
 - `<星座>`: 查詢指定星座運勢
 - `抽`: 取得隨機妹子圖片
+- `色色`: 取得隨機色色圖片
 - `!騷話`: 取得隨機騷話文字
 - `!舔狗`: 取得隨機舔狗文字
 
@@ -58,7 +59,7 @@ pnpm run deploy
 
 ```bash
 # 監控 Worker 即時日誌
-wrangler tail
+pnpm wrangler tail
 ```
 
 ### 日誌監控說明
