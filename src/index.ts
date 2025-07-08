@@ -832,14 +832,15 @@ async function handleMessage(event: LineEvent, env: Env, ctx: ExecutionContext):
 
 function isCommand(text: string): boolean {
 	// 先將全形符號轉換為半形符號
-	const normalizedText = text.replace(/[！]/g, '!');
+	const normalizedText = text?.replace(/[！]/g, '!')?.toLocaleLowerCase();
 
 	const isRoll = normalizedText === '!roll';
 	const isRollNum = normalizedText.startsWith('!rollnum');
 	const isDraw = normalizedText === '抽';
 	const isSexy = normalizedText === '!騷話' || normalizedText === '!骚话';
 	const isDog = normalizedText === '!舔狗';
-	const result = isRoll || isRollNum || isDraw || isSexy || isDog;
+	const isNSFW = text === '色色';
+	const result = isRoll || isRollNum || isDraw || isSexy || isDog || isNSFW;
 
 	logDebug('Command detection', {
 		originalText: text,
@@ -849,6 +850,7 @@ function isCommand(text: string): boolean {
 		isDraw,
 		isSexy,
 		isDog,
+		isNSFW,
 		result,
 	});
 
@@ -886,6 +888,13 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	if (normalizedText === '!舔狗') {
 		logDebug('Detected dog text command');
 		await handleDogText(event.replyToken!, env);
+		return;
+	}
+
+	// 處理「色色」命令
+	if (text === '色色') {
+		logDebug('Detected NSFW command');
+		await sendImageReply(event.replyToken!, 'https://image.anosu.top/pixiv?r18=1', env.LINE_CHANNEL_ACCESS_TOKEN);
 		return;
 	}
 
