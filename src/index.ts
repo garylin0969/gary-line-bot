@@ -21,6 +21,7 @@ const CONFIG = {
 } as const;
 
 const KEY_WORDS_REPLY = {
+	張瑋烝: '又偷操學生妹==',
 	許雲藏: '又再做愛？',
 	皓: '現在考到N幾了？',
 	stanley: '勝利爸爸...',
