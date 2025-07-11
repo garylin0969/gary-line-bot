@@ -450,33 +450,6 @@ async function sendImageReply(replyToken: string, imageUrl: string, accessToken:
 	);
 }
 
-async function fetchUserProfile(userId: string, accessToken: string): Promise<string> {
-	try {
-		const response = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
-			headers: {
-				Authorization: `Bearer ${accessToken}`,
-			},
-		});
-
-		if (!response.ok) {
-			logDebug('Failed to fetch user profile', {
-				userId,
-				status: response.status,
-			});
-			return userId;
-		}
-
-		const profile = (await response.json()) as { displayName: string };
-		return profile.displayName;
-	} catch (error) {
-		logDebug('Error fetching user profile', {
-			userId,
-			error,
-		});
-		return userId;
-	}
-}
-
 async function fetchGroupMemberProfile(userId: string, groupId: string, accessToken: string): Promise<string> {
 	try {
 		const response = await fetch(`https://api.line.me/v2/bot/group/${groupId}/member/${userId}`, {
@@ -844,7 +817,7 @@ async function handleMessage(event: LineEvent, env: Env, ctx: ExecutionContext):
 
 		logDebug('Processing as normal message', { text });
 		// 處理一般文本
-		await handleNormalMessage(text, event.replyToken, env, ctx);
+		await handleNormalMessage(text, event.replyToken, event.source?.userId || '', env, ctx);
 	} catch (error) {
 		logDebug('Error in handleMessage', { error });
 	}
@@ -965,13 +938,13 @@ async function handleGameCommand(event: LineEvent, env: Env, ctx: ExecutionConte
 	}
 }
 
-async function handleNormalMessage(text: string, replyToken: string, env: Env, ctx: ExecutionContext): Promise<void> {
+async function handleNormalMessage(text: string, replyToken: string, userId: string, env: Env, ctx: ExecutionContext): Promise<void> {
 	try {
 		// 檢查星座匹配
 		const match = findZodiacMatch(text);
 		if (match) {
-			logDebug('Found zodiac match', { match });
-			await handleHoroscope(match, replyToken, env, ctx);
+			logDebug('Found zodiac match', { match, userId });
+			await handleHoroscope(match, replyToken, userId, env, ctx);
 		}
 	} catch (error) {
 		logDebug('Error handling normal message', { error });
@@ -986,7 +959,15 @@ async function handleRandomImage(replyToken: string, env: Env): Promise<void> {
 	}
 }
 
-async function handleHoroscope(zodiacKey: string, replyToken: string, env: Env, ctx: ExecutionContext): Promise<void> {
+async function handleHoroscope(zodiacKey: string, replyToken: string, userId: string, env: Env, ctx: ExecutionContext): Promise<void> {
+	// 檢查是否為許雲藏的訊息
+	if (userId === 'U10e6659922346d74db502c05e908bc55') {
+		// 請替換成許雲藏的實際 LINE User ID
+		const customMessage = await getCustomHoroscopeForUser(zodiacKey);
+		await sendReply(replyToken, customMessage, env.LINE_CHANNEL_ACCESS_TOKEN);
+		return;
+	}
+
 	let data: HoroscopeData | null = null;
 	const cachedData = await getCachedHoroscope(env.HOROSCOPE_CACHE, zodiacKey);
 
@@ -1059,6 +1040,20 @@ async function handleDogText(replyToken: string, env: Env): Promise<void> {
 		const traditionalText = await converter(text);
 		await sendReply(replyToken, traditionalText, env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
+}
+
+async function getCustomHoroscopeForUser(zodiacKey: string): Promise<string> {
+	const todayDate = DateUtils.getTodayDate();
+	return `今日運勢 ( ${todayDate} ) ${zodiacKey}座
+愛情運 ★★★★★★★
+今天是個適合做愛的日子。
+事業運 ★★★★★★★
+今天是個適合做愛的日子。
+金錢運 ★★★★★★★
+今天是個適合做愛的日子。
+健康運 ★★★★★★★
+今天是個適合做愛的日子。
+幸運數字：69。幸運顏色：精液白`;
 }
 
 // Main handler
