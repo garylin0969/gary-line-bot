@@ -1000,7 +1000,7 @@ async function handleHoroscope(zodiacKey: string, replyToken: string, userId: st
 
 async function formatHoroscopeReply(data: HoroscopeData, zodiacKey: string): Promise<string> {
 	const converter = await getConverter();
-	const loveText = truncateToFirstPeriod(await converter(data.fortunetext.love));
+	const loveText = await converter(data.fortunetext.love);
 	const workText = truncateToFirstPeriod(await converter(data.fortunetext.work));
 	const moneyText = truncateToFirstPeriod(await converter(data.fortunetext.money));
 	const healthText = truncateToFirstPeriod(await converter(data.fortunetext.health));
