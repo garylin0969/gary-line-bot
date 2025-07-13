@@ -328,8 +328,24 @@ const zodiacMap: Record<string, string> = {
 };
 
 // Utility functions
-function stars(n: number): string {
-	return '★'.repeat(n) + '☆'.repeat(5 - n);
+function stars(n: number, seed?: string): string {
+	let adjustedN = n;
+
+	if (seed) {
+		// 使用簡單的字符串哈希算法
+		let hash = 0;
+		for (let i = 0; i < seed.length; i++) {
+			const char = seed.charCodeAt(i);
+			hash = (hash << 5) - hash + char;
+			hash = hash & hash; // 轉換為32位整數
+		}
+
+		// 基於哈希值生成-1到1的調整值
+		const adjustment = (hash % 3) - 1; // -1, 0, 或 1
+		adjustedN = Math.max(1, Math.min(5, n + adjustment));
+	}
+
+	return '★'.repeat(adjustedN) + '☆'.repeat(5 - adjustedN);
 }
 
 function truncateToFirstPeriod(text: string): string {
@@ -1006,13 +1022,14 @@ async function formatHoroscopeReply(data: HoroscopeData, zodiacKey: string): Pro
 	const healthText = truncateToFirstPeriod(await converter(data.fortunetext.health));
 	const luckyColor = await converter(data.luckycolor);
 
-	const loveStars = stars(data.fortune.love);
-	const workStars = stars(data.fortune.work);
-	const moneyStars = stars(data.fortune.money);
-	const healthStars = stars(data.fortune.health);
-	const todayDate = DateUtils.getTodayDate();
+	const todayDate = DateUtils.getTodayKey();
+	const loveStars = stars(data.fortune.love, `${todayDate}-${zodiacKey}-love`);
+	const workStars = stars(data.fortune.work, `${todayDate}-${zodiacKey}-work`);
+	const moneyStars = stars(data.fortune.money, `${todayDate}-${zodiacKey}-money`);
+	const healthStars = stars(data.fortune.health, `${todayDate}-${zodiacKey}-health`);
+	const displayDate = DateUtils.getTodayDate();
 
-	return `今日運勢 ( ${todayDate} ) ${zodiacKey}座
+	return `今日運勢 ( ${displayDate} ) ${zodiacKey}座
 愛情運 ${loveStars}
 ${loveText}
 事業運 ${workStars}
