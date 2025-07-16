@@ -1041,7 +1041,9 @@ ${workText}
 ${moneyText}
 健康運 ${healthStars}
 ${healthText}
-幸運數字 : ${data.luckynumber}。幸運顏色 : ${luckyColor}`;
+幸運數字 : ${data.luckynumber}。幸運顏色 : ${luckyColor}
+
+中年人請注重自身健康：stanley、許雲藏、陳逸謙、江阿姨。`;
 }
 
 async function handleSexyText(replyToken: string, env: Env): Promise<void> {
