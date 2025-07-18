@@ -685,6 +685,13 @@ async function handleRollNum(groupId: string, replyToken: string, text: string, 
 		return;
 	}
 
+	// 檢查是否為純整數（只包含數字）
+	if (!/^\d+$/.test(parts[1])) {
+		logDebug('Non-integer input detected', { rawInput: parts[1] });
+		await sendReply(replyToken, `操妳媽還敢亂搞啊 我內射妳肛門${parts[1]}次`, accessToken);
+		return;
+	}
+
 	const num = parseInt(parts[1]);
 	logDebug('Parsed player count', { num, rawInput: parts[1] });
 
