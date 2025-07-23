@@ -14,6 +14,7 @@ export const CONFIG = {
 		RANDOM_BLACK_SILK_IMAGE: 'https://v2.api-m.com/api/heisi?return=302',
 		RANDOM_WHITE_SILK_IMAGE: 'https://v2.api-m.com/api/baisi?return=302',
 		RANDOM_PORN_IMAGE: 'https://image.anosu.top/pixiv?r18=1&size=small',
+		RANDOM_GIRL_VIDEO: 'https://api.mhimg.cn/api/Sj_girls_video',
 		HOROSCOPE: 'https://garylin0969.github.io/json-gather/data/horoscope.json',
 		LOVE_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/love-copywriting.json',
 		FUNNY_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/funny-copywriting.json',

@@ -90,6 +90,21 @@ export async function sendImageReply(replyToken: string, imageUrl: string, acces
 	);
 }
 
+// 發送影片回覆
+export async function sendVideoReply(replyToken: string, videoUrl: string, accessToken: string): Promise<void> {
+	await sendLineMessages(
+		replyToken,
+		[
+			{
+				type: 'video',
+				originalContentUrl: videoUrl,
+				previewImageUrl: videoUrl.replace('.mp4', '_preview.jpg'), // 嘗試使用預覽圖，如果沒有則使用同樣的 URL
+			},
+		],
+		accessToken
+	);
+}
+
 // 取得群組成員資料
 export async function fetchGroupMemberProfile(userId: string, groupId: string, accessToken: string): Promise<string> {
 	try {

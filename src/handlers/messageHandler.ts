@@ -2,7 +2,7 @@ import * as OpenCC from 'opencc-js';
 import { LineEvent, Env } from '../types/index.js';
 import { KEY_WORDS_REPLY, CONFIG } from '../config/constants.js';
 import { logDebug } from '../utils/common.js';
-import { sendReply, sendImageReply, fetchText } from '../services/api.js';
+import { sendReply, sendImageReply, sendVideoReply, fetchText } from '../services/api.js';
 import {
 	findZodiacMatch,
 	getCachedHoroscope,
@@ -73,6 +73,7 @@ function isCommand(text: string): boolean {
 	const isFunnyCopywriting = normalizedText === '!幹話';
 	const isNSFW = text === '色色';
 	const isKeyWords = Boolean(Object?.keys(KEY_WORDS_REPLY)?.find((key) => normalizedText?.includes(key)));
+	const isLittleSister = normalizedText === '!小姊姊' || normalizedText === '!小姐姐';
 	const result =
 		isRoll ||
 		isRollNum ||
@@ -84,7 +85,8 @@ function isCommand(text: string): boolean {
 		isBlackSilk ||
 		isWhiteSilk ||
 		isLoveCopywriting ||
-		isFunnyCopywriting;
+		isFunnyCopywriting ||
+		isLittleSister;
 
 	logDebug('Command detection', {
 		originalText: text,
@@ -100,6 +102,7 @@ function isCommand(text: string): boolean {
 		isFunnyCopywriting,
 		isNSFW,
 		isKeyWords,
+		isLittleSister,
 		result,
 	});
 
@@ -186,6 +189,13 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 		if (copywritingText) {
 			await sendReply(event.replyToken!, copywritingText, env.LINE_CHANNEL_ACCESS_TOKEN);
 		}
+		return;
+	}
+
+	// 處理「小姊姊」命令
+	if (normalizedText === '!小姊姊' || normalizedText === '!小姐姐') {
+		logDebug('Detected little sister video command');
+		await handleLittleSisterVideo(event.replyToken!, env);
 		return;
 	}
 
@@ -294,5 +304,16 @@ async function handleDogText(replyToken: string, env: Env): Promise<void> {
 		const converter = await getConverter();
 		const traditionalText = await converter(text);
 		await sendReply(replyToken, traditionalText, env.LINE_CHANNEL_ACCESS_TOKEN);
+	}
+}
+
+// 處理小姊姊影片
+async function handleLittleSisterVideo(replyToken: string, env: Env): Promise<void> {
+	try {
+		await sendVideoReply(replyToken, CONFIG.API.RANDOM_GIRL_VIDEO, env.LINE_CHANNEL_ACCESS_TOKEN);
+		logDebug('Video sent successfully');
+	} catch (error) {
+		logDebug('Error handling little sister video', { error });
+		await sendReply(replyToken, '影片發送失敗，請稍後再試', env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
 }
