@@ -11,12 +11,16 @@ const CONFIG = {
 	},
 	API: {
 		RANDOM_GIRL_IMAGE_JSON: 'https://api.vvhan.com/api/avatar/girl?type=json',
-		RANDOM_GIRL_IMAGE: 'https://api.vvhan.com/api/avatar/girl',
+		RANDOM_GIRL_IMAGE: 'https://v2.api-m.com/api/meinvpic?return=302',
+		RANDOM_BLACK_SILK_IMAGE: 'https://v2.api-m.com/api/heisi?return=302',
+		RANDOM_WHITE_SILK_IMAGE: 'https://v2.api-m.com/api/baisi?return=302',
 		RANDOM_PORN_IMAGE: 'https://image.anosu.top/pixiv?r18=1&size=small',
-		LINE_REPLY: 'https://api.line.me/v2/bot/message/reply',
 		HOROSCOPE: 'https://api.vvhan.com/api/horoscope',
-		SEXY_TEXT: 'https://api.vvhan.com/api/text/sexy?type=json',
+		LOVE_COPYWRITING_TEXT: 'https://v.api.aa1.cn/api/api-wenan-aiqing/index.php?type=json',
+		FUNNY_COPYWRITING_TEXT: 'https://zj.v.api.aa1.cn/api/wenan-gaoxiao/?type=json',
+		SEXY_TEXT: 'https://v.api.aa1.cn/api/api-saohua/index.php?type=json',
 		DOG_TEXT: 'https://api.vvhan.com/api/text/dog?type=json',
+		LINE_REPLY: 'https://api.line.me/v2/bot/message/reply',
 	},
 } as const;
 
@@ -405,6 +409,30 @@ async function fetchText(apiUrl: string): Promise<string | null> {
 		if (data.success && data.data?.content) {
 			logDebug(`Successfully fetched text: ${data.data.content}`);
 			return data.data.content;
+		}
+
+		logDebug(`API request was not successful`);
+		return null;
+	} catch (error) {
+		logDebug(`Error fetching text:`, error);
+		return null;
+	}
+}
+
+// 使用 key 來取得 text 的值
+async function fetchTextByKey(apiUrl: string, key: string): Promise<string | null> {
+	try {
+		logDebug(`Fetching text from API: ${apiUrl}`);
+		const response = await fetch(apiUrl);
+
+		const data = (await response.json()) as any;
+		logDebug(`Text API response data:`, data);
+
+		const converter = await getConverter();
+
+		if (data?.[key]) {
+			logDebug(`Successfully fetched text: ${data?.[key]}`);
+			return await converter(data?.[key]);
 		}
 
 		logDebug(`API request was not successful`);
@@ -858,11 +886,26 @@ function isCommand(text: string): boolean {
 	const isRoll = normalizedText === '!roll';
 	const isRollNum = normalizedText.startsWith('!rollnum');
 	const isDraw = normalizedText === '抽';
+	const isBlackSilk = normalizedText === '!黑絲';
+	const isWhiteSilk = normalizedText === '!白絲';
 	const isSexy = normalizedText === '!騷話' || normalizedText === '!骚话';
 	const isDog = normalizedText === '!舔狗';
+	const isLoveCopywriting = normalizedText === '!情話';
+	const isFunnyCopywriting = normalizedText === '!幹話';
 	const isNSFW = text === '色色';
 	const isKeyWords = Boolean(Object?.keys(KEY_WORDS_REPLY)?.find((key) => normalizedText?.includes(key)));
-	const result = isRoll || isRollNum || isDraw || isSexy || isDog || isNSFW || isKeyWords;
+	const result =
+		isRoll ||
+		isRollNum ||
+		isDraw ||
+		isSexy ||
+		isDog ||
+		isNSFW ||
+		isKeyWords ||
+		isBlackSilk ||
+		isWhiteSilk ||
+		isLoveCopywriting ||
+		isFunnyCopywriting;
 
 	logDebug('Command detection', {
 		originalText: text,
@@ -870,8 +913,12 @@ function isCommand(text: string): boolean {
 		isRoll,
 		isRollNum,
 		isDraw,
+		isBlackSilk,
+		isWhiteSilk,
 		isSexy,
 		isDog,
+		isLoveCopywriting,
+		isFunnyCopywriting,
 		isNSFW,
 		isKeyWords,
 		result,
@@ -901,10 +948,17 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 		return;
 	}
 
-	// 處理「騷話」命令
-	if (normalizedText === '!騷話' || normalizedText === '!骚话') {
-		logDebug('Detected sexy text command');
-		await handleSexyText(event.replyToken!, env);
+	// 處理「黑絲」命令
+	if (normalizedText === '!黑絲') {
+		logDebug('Detected black silk command');
+		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_BLACK_SILK_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
+		return;
+	}
+
+	// 處理「白絲」命令
+	if (normalizedText === '!白絲') {
+		logDebug('Detected white silk command');
+		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_WHITE_SILK_IMAGE + '?rand=' + Math.random(), env.LINE_CHANNEL_ACCESS_TOKEN);
 		return;
 	}
 
@@ -919,6 +973,36 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	if (text === '色色') {
 		logDebug('Detected NSFW command');
 		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_PORN_IMAGE + '?rand=' + Math.random(), env.LINE_CHANNEL_ACCESS_TOKEN);
+		return;
+	}
+
+	// 處理「情話」命令
+	if (normalizedText === '!情話') {
+		logDebug('Detected love copywriting command');
+		const text = await fetchTextByKey(CONFIG.API.LOVE_COPYWRITING_TEXT, 'text');
+		if (text) {
+			await sendReply(event.replyToken!, text, env.LINE_CHANNEL_ACCESS_TOKEN);
+		}
+		return;
+	}
+
+	// 處理「幹話」命令
+	if (normalizedText === '!幹話') {
+		logDebug('Detected funny copywriting command');
+		const text = await fetchTextByKey(CONFIG.API.FUNNY_COPYWRITING_TEXT, 'msg');
+		if (text) {
+			await sendReply(event.replyToken!, text, env.LINE_CHANNEL_ACCESS_TOKEN);
+		}
+		return;
+	}
+
+	// 處理「騷話」命令
+	if (normalizedText === '!騷話') {
+		logDebug('Detected sexy text command');
+		const text = await fetchTextByKey(CONFIG.API.SEXY_TEXT, 'saohua');
+		if (text) {
+			await sendReply(event.replyToken!, text, env.LINE_CHANNEL_ACCESS_TOKEN);
+		}
 		return;
 	}
 
