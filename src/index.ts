@@ -15,7 +15,7 @@ const CONFIG = {
 		RANDOM_BLACK_SILK_IMAGE: 'https://v2.api-m.com/api/heisi?return=302',
 		RANDOM_WHITE_SILK_IMAGE: 'https://v2.api-m.com/api/baisi?return=302',
 		RANDOM_PORN_IMAGE: 'https://image.anosu.top/pixiv?r18=1&size=small',
-		HOROSCOPE: 'https://api.vvhan.com/api/horoscope',
+		HOROSCOPE: 'https://garylin0969.github.io/json-gather/data/horoscope.json',
 		LOVE_COPYWRITING_TEXT: 'https://v.api.aa1.cn/api/api-wenan-aiqing/index.php?type=json',
 		FUNNY_COPYWRITING_TEXT: 'https://zj.v.api.aa1.cn/api/wenan-gaoxiao/?type=json',
 		SEXY_TEXT: 'https://v.api.aa1.cn/api/api-saohua/index.php?type=json',
@@ -84,39 +84,43 @@ interface TextResponse {
 }
 
 interface HoroscopeData {
-	type: string;
-	name: string;
-	title: string;
-	time: string;
-	todo: {
-		yi: string;
+	constellation: string;
+	chineseName: string;
+	success: boolean;
+	code: string;
+	msg: string;
+	data: {
 		ji: string;
-	};
-	fortune: {
-		all: number;
-		love: number;
-		work: number;
-		money: number;
-		health: number;
-	};
-	shortcomment: string;
-	fortunetext: {
+		yi: string;
 		all: string;
+		date: string;
 		love: string;
 		work: string;
 		money: string;
 		health: string;
+		notice: string;
+		discuss: string;
+		all_text: string;
+		love_text: string;
+		work_text: string;
+		lucky_star: string;
+		money_text: string;
+		health_text: string;
+		lucky_color: string;
+		lucky_number: string;
 	};
-	luckynumber: string;
-	luckycolor: string;
-	luckyconstellation: string;
-	index: {
-		all: string;
-		love: string;
-		work: string;
-		money: string;
-		health: string;
-	};
+}
+
+interface HoroscopeResponse {
+	updated: string;
+	updateTime: string;
+	totalConstellations: number;
+	successCount: number;
+	failureCount: number;
+	processingTimeMs: number;
+	convertedToTraditional: boolean;
+	errors: string[];
+	horoscopes: Record<string, HoroscopeData>;
 }
 
 interface CachedHoroscope {
@@ -529,30 +533,37 @@ async function fetchGroupMemberProfile(userId: string, groupId: string, accessTo
 }
 
 // Horoscope Functions
-async function fetchHoroscopeData(zodiacEn: string): Promise<HoroscopeData | null> {
-	const apiUrl = `${CONFIG.API.HOROSCOPE}?type=${zodiacEn}&time=today`;
-
+async function fetchAllHoroscopesData(): Promise<HoroscopeResponse | null> {
 	try {
-		logDebug('Fetching horoscope data', { zodiacEn, apiUrl });
-		const response = await fetch(apiUrl);
+		logDebug('Fetching all horoscope data', { apiUrl: CONFIG.API.HOROSCOPE });
+		const response = await fetch(CONFIG.API.HOROSCOPE);
 		logDebug('Horoscope API response status', { status: response.status });
 
-		const horoscope = (await response.json()) as { success: boolean; data: HoroscopeData };
-		if (horoscope.success && horoscope.data) {
-			logDebug('Successfully fetched horoscope data', { zodiacEn });
-			return horoscope.data;
+		if (!response.ok) {
+			logDebug('Failed to fetch horoscope data', { status: response.status });
+			return null;
 		}
 
-		logDebug('Failed to fetch horoscope data', {
-			zodiacEn,
-			success: horoscope.success,
-			hasData: !!horoscope.data,
+		const horoscopeData = (await response.json()) as HoroscopeResponse;
+		logDebug('Successfully fetched all horoscope data', {
+			successCount: horoscopeData.successCount,
+			totalConstellations: horoscopeData.totalConstellations,
 		});
-		return null;
+		return horoscopeData;
 	} catch (error) {
-		logDebug('Error fetching horoscope data', { zodiacEn, error });
+		logDebug('Error fetching all horoscope data', { error });
 		return null;
 	}
+}
+
+async function fetchHoroscopeData(zodiacEn: string): Promise<HoroscopeData | null> {
+	const allData = await fetchAllHoroscopesData();
+	if (!allData || !allData.horoscopes[zodiacEn]) {
+		logDebug('Failed to get horoscope data for zodiac', { zodiacEn });
+		return null;
+	}
+
+	return allData.horoscopes[zodiacEn];
 }
 
 async function getCachedHoroscope(kv: KVNamespace, zodiacKey: string): Promise<CachedHoroscope | null> {
@@ -597,34 +608,36 @@ async function cacheHoroscope(kv: KVNamespace, zodiacKey: string, data: Horoscop
 async function preloadAllHoroscopes(kv: KVNamespace): Promise<void> {
 	logDebug('Starting horoscope preload');
 
-	const allZodiacs = Object.keys(zodiacMap);
-	const uniqueZodiacEns = [...new Set(Object.values(zodiacMap))];
-
-	logDebug('Preloading horoscopes', { uniqueZodiacEns });
-
-	for (const zodiacEn of uniqueZodiacEns) {
-		try {
-			logDebug('Preloading horoscope', { zodiacEn });
-			const data = await fetchHoroscopeData(zodiacEn);
-
-			if (data) {
-				const zodiacKeys = allZodiacs.filter((key) => zodiacMap[key] === zodiacEn);
-				logDebug('Caching horoscope data', { zodiacEn, zodiacKeys });
-
-				for (const key of zodiacKeys) {
-					await cacheHoroscope(kv, key, data);
-				}
-
-				logDebug('Successfully preloaded horoscope', { zodiacEn });
-			} else {
-				logDebug('Failed to fetch horoscope data', { zodiacEn });
-			}
-		} catch (error) {
-			logDebug('Error preloading horoscope', { zodiacEn, error });
+	try {
+		const allData = await fetchAllHoroscopesData();
+		if (!allData) {
+			logDebug('Failed to fetch all horoscope data');
+			return;
 		}
-	}
 
-	logDebug('Completed horoscope preload');
+		const allZodiacs = Object.keys(zodiacMap);
+		logDebug('Caching all horoscope data', {
+			totalConstellations: allData.totalConstellations,
+			successCount: allData.successCount,
+		});
+
+		// 快取所有星座資料
+		for (const zodiacKey of allZodiacs) {
+			const zodiacEn = zodiacMap[zodiacKey];
+			const horoscopeData = allData.horoscopes[zodiacEn];
+
+			if (horoscopeData && horoscopeData.success) {
+				await cacheHoroscope(kv, zodiacKey, horoscopeData);
+				logDebug('Cached horoscope data', { zodiacKey, zodiacEn });
+			} else {
+				logDebug('No data available for zodiac', { zodiacKey, zodiacEn });
+			}
+		}
+
+		logDebug('Completed horoscope preload');
+	} catch (error) {
+		logDebug('Error in preload process', { error });
+	}
 }
 
 function findZodiacMatch(text: string): string | undefined {
@@ -1109,30 +1122,36 @@ async function handleHoroscope(zodiacKey: string, replyToken: string, userId: st
 }
 
 async function formatHoroscopeReply(data: HoroscopeData, zodiacKey: string): Promise<string> {
-	const converter = await getConverter();
-	const loveText = await converter(data.fortunetext.love);
-	const workText = truncateToFirstPeriod(await converter(data.fortunetext.work));
-	const moneyText = truncateToFirstPeriod(await converter(data.fortunetext.money));
-	const healthText = truncateToFirstPeriod(await converter(data.fortunetext.health));
-	const luckyColor = await converter(data.luckycolor);
-
 	const todayDate = DateUtils.getTodayKey();
-	const loveStars = stars(data.fortune.love, `${todayDate}-${zodiacKey}-love`);
-	const workStars = stars(data.fortune.work, `${todayDate}-${zodiacKey}-work`);
-	const moneyStars = stars(data.fortune.money, `${todayDate}-${zodiacKey}-money`);
-	const healthStars = stars(data.fortune.health, `${todayDate}-${zodiacKey}-health`);
 	const displayDate = DateUtils.getTodayDate();
 
+	// 將百分比字符串轉換為1-5的星級
+	const loveStars = stars(Math.ceil(parseInt(data.data.love) / 20), `${todayDate}-${zodiacKey}-love`);
+	const workStars = stars(Math.ceil(parseInt(data.data.work) / 20), `${todayDate}-${zodiacKey}-work`);
+	const moneyStars = stars(Math.ceil(parseInt(data.data.money) / 20), `${todayDate}-${zodiacKey}-money`);
+	const healthStars = stars(Math.ceil(parseInt(data.data.health) / 20), `${todayDate}-${zodiacKey}-health`);
+
 	return `今日運勢 ( ${displayDate} ) ${zodiacKey}座
-愛情運 ${loveStars}
-${loveText}
-事業運 ${workStars}
-${workText}
-金錢運 ${moneyStars}
-${moneyText}
-健康運 ${healthStars}
-${healthText}
-幸運數字 : ${data.luckynumber}。幸運顏色 : ${luckyColor}
+
+📝 今日提醒：${data.data.notice}
+✅ 宜：${data.data.yi}
+❌ 忌：${data.data.ji}
+
+💕 愛情運 ${loveStars} (${data.data.love})
+${data.data.love_text}
+
+💼 事業運 ${workStars} (${data.data.work})
+${truncateToFirstPeriod(data.data.work_text)}
+
+💰 金錢運 ${moneyStars} (${data.data.money})
+${truncateToFirstPeriod(data.data.money_text)}
+
+🏥 健康運 ${healthStars} (${data.data.health})
+${truncateToFirstPeriod(data.data.health_text)}
+
+🍀 幸運數字：${data.data.lucky_number}
+🎨 幸運顏色：${data.data.lucky_color}
+🌟 幸運星座：${data.data.lucky_star}
 
 中年人請注重自身健康：stanley、許雲藏、陳逸謙、江阿姨。`;
 }
@@ -1160,15 +1179,26 @@ async function handleDogText(replyToken: string, env: Env): Promise<void> {
 async function getCustomHoroscopeForUser(zodiacKey: string): Promise<string> {
 	const todayDate = DateUtils.getTodayDate();
 	return `今日運勢 ( ${todayDate} ) ${zodiacKey}座
-愛情運 ★★★★★★★
-今天是個適合做愛的日子。
-事業運 ★★★★★★★
-今天是個適合做愛的日子。
-金錢運 ★★★★★★★
-今天是個適合做愛的日子。
-健康運 ★★★★★★★
-今天是個適合做愛的日子。
-幸運數字：69。幸運顏色：精液白`;
+
+📝 今日提醒：多做愛
+✅ 宜：做愛
+❌ 忌：不做愛
+
+💕 愛情運 ★★★★★★★ (100%)
+今天是個適合做愛的日子，單身的可以約炮，有伴的可以盡情享受。
+
+💼 事業運 ★★★★★★★ (100%)
+今天是個適合做愛的日子，做愛能提升你的工作效率和創造力。
+
+💰 金錢運 ★★★★★★★ (100%)
+今天是個適合做愛的日子，做愛後財運會大幅提升。
+
+🏥 健康運 ★★★★★★★ (100%)
+今天是個適合做愛的日子，做愛是最好的運動和保健方式。
+
+🍀 幸運數字：69
+🎨 幸運顏色：精液白
+🌟 幸運星座：可憐沒有`;
 }
 
 // Main handler
@@ -1214,16 +1244,18 @@ export default {
 	async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
 		const now = new Date(event.scheduledTime);
 		const utc8Hour = (now.getUTCHours() + 8) % 24; // 轉換為 UTC+8
+		const utc8Minute = now.getUTCMinutes();
 
 		logDebug('Scheduled event triggered', {
 			time: event.scheduledTime,
 			utc8Hour,
+			utc8Minute,
 			type: 'daily',
 		});
 
-		// 確保只在 UTC+8 00:00 執行預加載
-		if (utc8Hour === 0) {
-			logDebug('Starting daily horoscope preload');
+		// 確保只在 UTC+8 00:10 執行預加載
+		if (utc8Hour === 0 && utc8Minute === 10) {
+			logDebug('Starting daily horoscope preload at 00:10');
 			try {
 				await preloadAllHoroscopes(env.HOROSCOPE_CACHE);
 				logDebug('Daily horoscope preload completed successfully');
@@ -1231,7 +1263,7 @@ export default {
 				logDebug('Error during daily horoscope preload', { error });
 			}
 		} else {
-			logDebug('Skipping preload - not midnight UTC+8', { utc8Hour });
+			logDebug('Skipping preload - not 00:10 UTC+8', { utc8Hour, utc8Minute });
 		}
 	},
 };
