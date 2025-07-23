@@ -957,7 +957,7 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	if (text === '抽') {
 		logDebug('Detected draw command');
 		// await handleRandomImage(event.replyToken!, env); // 隨機圖片JSON版本要打api另外處理
-		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_GIRL_IMAGE + '?rand=' + Math.random(), env.LINE_CHANNEL_ACCESS_TOKEN);
+		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_GIRL_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
 		return;
 	}
 
