@@ -58,8 +58,46 @@ export async function getCachedHoroscope(kv: KVNamespace, zodiacKey: string): Pr
 		const cached = await kv.get(cacheKey);
 		if (cached) {
 			const parsed = JSON.parse(cached) as CachedHoroscope;
-			logDebug('Cache hit for horoscope', { zodiacKey });
-			return parsed;
+
+			// 檢查快取資料的日期是否為今日
+			const cachedDate = parsed.data.data.date; // YYYY-MM-DD 格式
+			const today = DateUtils.getTodayDate(); // MM/DD 格式
+
+			// 將 API 日期格式 (YYYY-MM-DD) 轉換為 MM/DD 格式進行比較
+			const cachedDateFormatted = cachedDate.substring(5).replace('-', '/'); // "2025-07-23" -> "07/23"
+
+			logDebug('Checking cached horoscope date', {
+				zodiacKey,
+				cachedDate,
+				cachedDateFormatted,
+				today,
+				isToday: cachedDateFormatted === today,
+			});
+
+			// 如果快取資料是今日的，直接返回
+			if (cachedDateFormatted === today) {
+				logDebug('Cache hit for horoscope (today)', { zodiacKey });
+				return parsed;
+			} else {
+				// 快取資料不是今日的，需要重新獲取
+				logDebug('Cache data is outdated, fetching fresh data', { zodiacKey, cachedDate, cachedDateFormatted, today });
+				const zodiacEn = zodiacMap[zodiacKey];
+				const freshData = await fetchHoroscopeData(zodiacEn);
+
+				if (freshData && freshData.success) {
+					// 更新快取
+					await cacheHoroscope(kv, zodiacKey, freshData);
+					logDebug('Updated cache with fresh horoscope data', { zodiacKey });
+
+					return {
+						data: freshData,
+						cachedAt: new Date().toISOString(),
+					};
+				} else {
+					logDebug('Failed to fetch fresh horoscope data, returning outdated cache', { zodiacKey });
+					return parsed; // 如果獲取失敗，返回舊資料總比沒有好
+				}
+			}
 		}
 
 		logDebug('Cache miss for horoscope', { zodiacKey });
