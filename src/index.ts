@@ -1122,14 +1122,7 @@ async function handleHoroscope(zodiacKey: string, replyToken: string, userId: st
 }
 
 async function formatHoroscopeReply(data: HoroscopeData, zodiacKey: string): Promise<string> {
-	const todayDate = DateUtils.getTodayKey();
 	const displayDate = DateUtils.getTodayDate();
-
-	// 將百分比字符串轉換為1-5的星級
-	const loveStars = stars(Math.ceil(parseInt(data.data.love) / 20), `${todayDate}-${zodiacKey}-love`);
-	const workStars = stars(Math.ceil(parseInt(data.data.work) / 20), `${todayDate}-${zodiacKey}-work`);
-	const moneyStars = stars(Math.ceil(parseInt(data.data.money) / 20), `${todayDate}-${zodiacKey}-money`);
-	const healthStars = stars(Math.ceil(parseInt(data.data.health) / 20), `${todayDate}-${zodiacKey}-health`);
 
 	return `今日運勢 ( ${displayDate} ) ${zodiacKey}座
 
@@ -1137,16 +1130,16 @@ async function formatHoroscopeReply(data: HoroscopeData, zodiacKey: string): Pro
 ✅ 宜：${data.data.yi}
 ❌ 忌：${data.data.ji}
 
-💕 愛情運 ${loveStars} (${data.data.love})
+💕 愛情運 (${data.data.love})
 ${data.data.love_text}
 
-💼 事業運 ${workStars} (${data.data.work})
+💼 事業運 (${data.data.work})
 ${truncateToFirstPeriod(data.data.work_text)}
 
-💰 金錢運 ${moneyStars} (${data.data.money})
+💰 金錢運 (${data.data.money})
 ${truncateToFirstPeriod(data.data.money_text)}
 
-🏥 健康運 ${healthStars} (${data.data.health})
+🏥 健康運 (${data.data.health})
 ${truncateToFirstPeriod(data.data.health_text)}
 
 🍀 幸運數字：${data.data.lucky_number}
@@ -1184,16 +1177,16 @@ async function getCustomHoroscopeForUser(zodiacKey: string): Promise<string> {
 ✅ 宜：做愛
 ❌ 忌：不做愛
 
-💕 愛情運 ★★★★★★★ (100%)
+💕 愛情運 (100%)
 今天是個適合做愛的日子，單身的可以約炮，有伴的可以盡情享受。
 
-💼 事業運 ★★★★★★★ (100%)
+💼 事業運 (100%)
 今天是個適合做愛的日子，做愛能提升你的工作效率和創造力。
 
-💰 金錢運 ★★★★★★★ (100%)
+💰 金錢運 (100%)
 今天是個適合做愛的日子，做愛後財運會大幅提升。
 
-🏥 健康運 ★★★★★★★ (100%)
+🏥 健康運 (100%)
 今天是個適合做愛的日子，做愛是最好的運動和保健方式。
 
 🍀 幸運數字：69
