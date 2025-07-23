@@ -8,6 +8,7 @@ const CONFIG = {
 	},
 	CACHE: {
 		EXPIRATION: 25 * 60 * 60, // 25小時後過期
+		COPYWRITING_EXPIRATION: 2 * 60 * 60, // 2小時後過期
 	},
 	API: {
 		RANDOM_GIRL_IMAGE_JSON: 'https://api.vvhan.com/api/avatar/girl?type=json',
@@ -16,9 +17,9 @@ const CONFIG = {
 		RANDOM_WHITE_SILK_IMAGE: 'https://v2.api-m.com/api/baisi?return=302',
 		RANDOM_PORN_IMAGE: 'https://image.anosu.top/pixiv?r18=1&size=small',
 		HOROSCOPE: 'https://garylin0969.github.io/json-gather/data/horoscope.json',
-		LOVE_COPYWRITING_TEXT: 'https://v.api.aa1.cn/api/api-wenan-aiqing/index.php?type=json',
-		FUNNY_COPYWRITING_TEXT: 'https://zj.v.api.aa1.cn/api/wenan-gaoxiao/?type=json',
-		SEXY_TEXT: 'https://v.api.aa1.cn/api/api-saohua/index.php?type=json',
+		LOVE_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/love-copywriting.json',
+		FUNNY_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/funny-copywriting.json',
+		ROMANTIC_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/romantic-copywriting.json',
 		DOG_TEXT: 'https://api.vvhan.com/api/text/dog?type=json',
 		LINE_REPLY: 'https://api.line.me/v2/bot/message/reply',
 	},
@@ -65,6 +66,7 @@ interface LineEvent {
 interface Env {
 	LINE_CHANNEL_ACCESS_TOKEN: string;
 	HOROSCOPE_CACHE: KVNamespace;
+	COPYWRITING_CACHE: KVNamespace;
 	GAME_STATE: DurableObjectNamespace;
 }
 
@@ -125,6 +127,29 @@ interface HoroscopeResponse {
 
 interface CachedHoroscope {
 	data: HoroscopeData;
+	cachedAt: string;
+}
+
+interface CopywritingItem {
+	id: number;
+	content: string;
+	length: number;
+	addedAt: string;
+}
+
+interface CopywritingResponse {
+	type: string;
+	updated: string;
+	updateTime: string;
+	totalCount: number;
+	targetCount: number;
+	completionRate: string;
+	convertedToTraditional: boolean;
+	copywritings: CopywritingItem[];
+}
+
+interface CachedCopywriting {
+	data: CopywritingResponse;
 	cachedAt: string;
 }
 
@@ -423,30 +448,6 @@ async function fetchText(apiUrl: string): Promise<string | null> {
 	}
 }
 
-// 使用 key 來取得 text 的值
-async function fetchTextByKey(apiUrl: string, key: string): Promise<string | null> {
-	try {
-		logDebug(`Fetching text from API: ${apiUrl}`);
-		const response = await fetch(apiUrl);
-
-		const data = (await response.json()) as any;
-		logDebug(`Text API response data:`, data);
-
-		const converter = await getConverter();
-
-		if (data?.[key]) {
-			logDebug(`Successfully fetched text: ${data?.[key]}`);
-			return await converter(data?.[key]);
-		}
-
-		logDebug(`API request was not successful`);
-		return null;
-	} catch (error) {
-		logDebug(`Error fetching text:`, error);
-		return null;
-	}
-}
-
 async function fetchRandomImage(): Promise<string | null> {
 	try {
 		logDebug(`Fetching random image from API: ${CONFIG.API.RANDOM_GIRL_IMAGE_JSON}`);
@@ -638,6 +639,148 @@ async function preloadAllHoroscopes(kv: KVNamespace): Promise<void> {
 	} catch (error) {
 		logDebug('Error in preload process', { error });
 	}
+}
+
+// Copywriting Functions
+async function fetchCopywritingData(apiUrl: string): Promise<CopywritingResponse | null> {
+	try {
+		logDebug(`Fetching copywriting data from: ${apiUrl}`);
+		const response = await fetch(apiUrl);
+		logDebug(`Copywriting API response status: ${response.status}`);
+
+		if (!response.ok) {
+			logDebug(`API request failed with status: ${response.status}`);
+			return null;
+		}
+
+		const data = (await response.json()) as CopywritingResponse;
+		logDebug(`Successfully fetched copywriting data`, {
+			type: data.type,
+			totalCount: data.totalCount,
+			convertedToTraditional: data.convertedToTraditional,
+		});
+
+		return data;
+	} catch (error) {
+		logDebug(`Error fetching copywriting data:`, error);
+		return null;
+	}
+}
+
+async function getCachedCopywriting(kv: KVNamespace, cacheKey: string): Promise<CachedCopywriting | null> {
+	try {
+		const cached = await kv.get(cacheKey);
+		if (cached) {
+			const parsed = JSON.parse(cached) as CachedCopywriting;
+
+			// 檢查是否過期（2小時）
+			const cachedAt = new Date(parsed.cachedAt);
+			const now = new Date();
+			const timeDiff = now.getTime() - cachedAt.getTime();
+
+			if (timeDiff < CONFIG.CACHE.COPYWRITING_EXPIRATION * 1000) {
+				logDebug('Cache hit for copywriting', { cacheKey });
+				return parsed;
+			} else {
+				logDebug('Cache expired for copywriting', { cacheKey, timeDiff });
+				return null;
+			}
+		}
+
+		logDebug('Cache miss for copywriting', { cacheKey });
+		return null;
+	} catch (error) {
+		logDebug('Error getting cached copywriting', { cacheKey, error });
+		return null;
+	}
+}
+
+async function cacheCopywriting(kv: KVNamespace, cacheKey: string, data: CopywritingResponse): Promise<void> {
+	const cachedData: CachedCopywriting = {
+		data,
+		cachedAt: new Date().toISOString(),
+	};
+
+	try {
+		await kv.put(cacheKey, JSON.stringify(cachedData), {
+			expirationTtl: CONFIG.CACHE.COPYWRITING_EXPIRATION,
+		});
+		logDebug('Cached copywriting data', { cacheKey, totalCount: data.totalCount });
+	} catch (error) {
+		logDebug('Error caching copywriting data', { cacheKey, error });
+	}
+}
+
+async function getRandomCopywritingText(apiUrl: string, cacheKey: string, kv: KVNamespace): Promise<string | null> {
+	try {
+		// 嘗試從快取獲取
+		let cachedData = await getCachedCopywriting(kv, cacheKey);
+
+		if (!cachedData) {
+			// 快取未命中或過期，從API獲取新資料
+			logDebug('Fetching fresh copywriting data', { apiUrl, cacheKey });
+			const freshData = await fetchCopywritingData(apiUrl);
+
+			if (!freshData || !freshData.copywritings || freshData.copywritings.length === 0) {
+				logDebug('No copywriting data available', { apiUrl });
+				return null;
+			}
+
+			// 快取新資料
+			await cacheCopywriting(kv, cacheKey, freshData);
+			cachedData = { data: freshData, cachedAt: new Date().toISOString() };
+		}
+
+		// 從文案陣列中隨機選擇一個
+		const copywritings = cachedData.data.copywritings;
+		if (copywritings.length === 0) {
+			return null;
+		}
+
+		const randomIndex = Math.floor(Math.random() * copywritings.length);
+		const selectedCopywriting = copywritings[randomIndex];
+
+		logDebug('Selected random copywriting', {
+			cacheKey,
+			selectedId: selectedCopywriting.id,
+			content: selectedCopywriting.content.substring(0, 20) + '...',
+		});
+
+		return selectedCopywriting.content;
+	} catch (error) {
+		logDebug('Error getting random copywriting text', { error, apiUrl, cacheKey });
+		return null;
+	}
+}
+
+async function preloadAllCopywritings(kv: KVNamespace): Promise<void> {
+	logDebug('Starting copywriting preload');
+
+	const copywritingAPIs = [
+		{ url: CONFIG.API.LOVE_COPYWRITING_TEXT, key: 'love_copywriting' },
+		{ url: CONFIG.API.FUNNY_COPYWRITING_TEXT, key: 'funny_copywriting' },
+		{ url: CONFIG.API.ROMANTIC_COPYWRITING_TEXT, key: 'romantic_copywriting' },
+	];
+
+	for (const api of copywritingAPIs) {
+		try {
+			logDebug(`Preloading copywriting: ${api.key}`);
+			const data = await fetchCopywritingData(api.url);
+
+			if (data && data.copywritings && data.copywritings.length > 0) {
+				await cacheCopywriting(kv, api.key, data);
+				logDebug(`Successfully cached copywriting: ${api.key}`, {
+					totalCount: data.totalCount,
+				});
+			} else {
+				logDebug(`No data available for copywriting: ${api.key}`);
+			}
+		} catch (error) {
+			logDebug(`Error preloading copywriting: ${api.key}`, { error });
+		}
+	}
+
+	logDebug('Completed copywriting preload');
 }
 
 function findZodiacMatch(text: string): string | undefined {
@@ -901,7 +1044,7 @@ function isCommand(text: string): boolean {
 	const isDraw = normalizedText === '抽';
 	const isBlackSilk = normalizedText === '!黑絲';
 	const isWhiteSilk = normalizedText === '!白絲';
-	const isSexy = normalizedText === '!騷話' || normalizedText === '!骚话';
+	const isRomanticCopywriting = normalizedText === '!騷話' || normalizedText === '!骚话';
 	const isDog = normalizedText === '!舔狗';
 	const isLoveCopywriting = normalizedText === '!情話';
 	const isFunnyCopywriting = normalizedText === '!幹話';
@@ -911,7 +1054,7 @@ function isCommand(text: string): boolean {
 		isRoll ||
 		isRollNum ||
 		isDraw ||
-		isSexy ||
+		isRomanticCopywriting ||
 		isDog ||
 		isNSFW ||
 		isKeyWords ||
@@ -928,7 +1071,7 @@ function isCommand(text: string): boolean {
 		isDraw,
 		isBlackSilk,
 		isWhiteSilk,
-		isSexy,
+		isRomanticCopywriting,
 		isDog,
 		isLoveCopywriting,
 		isFunnyCopywriting,
@@ -992,7 +1135,7 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	// 處理「情話」命令
 	if (normalizedText === '!情話') {
 		logDebug('Detected love copywriting command');
-		const text = await fetchTextByKey(CONFIG.API.LOVE_COPYWRITING_TEXT, 'text');
+		const text = await getRandomCopywritingText(CONFIG.API.LOVE_COPYWRITING_TEXT, 'love_copywriting', env.COPYWRITING_CACHE);
 		if (text) {
 			await sendReply(event.replyToken!, text, env.LINE_CHANNEL_ACCESS_TOKEN);
 		}
@@ -1002,7 +1145,7 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	// 處理「幹話」命令
 	if (normalizedText === '!幹話') {
 		logDebug('Detected funny copywriting command');
-		const text = await fetchTextByKey(CONFIG.API.FUNNY_COPYWRITING_TEXT, 'msg');
+		const text = await getRandomCopywritingText(CONFIG.API.FUNNY_COPYWRITING_TEXT, 'funny_copywriting', env.COPYWRITING_CACHE);
 		if (text) {
 			await sendReply(event.replyToken!, text, env.LINE_CHANNEL_ACCESS_TOKEN);
 		}
@@ -1012,7 +1155,7 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	// 處理「騷話」命令
 	if (normalizedText === '!騷話') {
 		logDebug('Detected sexy text command');
-		const text = await fetchTextByKey(CONFIG.API.SEXY_TEXT, 'saohua');
+		const text = await getRandomCopywritingText(CONFIG.API.ROMANTIC_COPYWRITING_TEXT, 'romantic_copywriting', env.COPYWRITING_CACHE);
 		if (text) {
 			await sendReply(event.replyToken!, text, env.LINE_CHANNEL_ACCESS_TOKEN);
 		}
@@ -1143,7 +1286,7 @@ ${truncateToFirstPeriod(data.data.health_text)}
 
 async function handleSexyText(replyToken: string, env: Env): Promise<void> {
 	logDebug('Handling sexy text request');
-	const text = await fetchText(CONFIG.API.SEXY_TEXT);
+	const text = await fetchText(CONFIG.API.ROMANTIC_COPYWRITING_TEXT);
 	if (text) {
 		const converter = await getConverter();
 		const traditionalText = await converter(text);
@@ -1189,8 +1332,15 @@ export default {
 		// 手動預載端點
 		if (url.pathname === '/preload' && request.method === 'GET') {
 			logDebug('Manual preload triggered');
-			await preloadAllHoroscopes(env.HOROSCOPE_CACHE);
+			await Promise.all([preloadAllHoroscopes(env.HOROSCOPE_CACHE), preloadAllCopywritings(env.COPYWRITING_CACHE)]);
 			return new Response('Preload completed', { status: 200 });
+		}
+
+		// 手動預載文案端點
+		if (url.pathname === '/preload-copywriting' && request.method === 'GET') {
+			logDebug('Manual copywriting preload triggered');
+			await preloadAllCopywritings(env.COPYWRITING_CACHE);
+			return new Response('Copywriting preload completed', { status: 200 });
 		}
 
 		if (request.method !== 'POST') {
@@ -1230,10 +1380,9 @@ export default {
 			time: event.scheduledTime,
 			utc8Hour,
 			utc8Minute,
-			type: 'daily',
 		});
 
-		// 確保只在 UTC+8 00:10 執行預加載
+		// 每天 UTC+8 00:10 執行運勢預載
 		if (utc8Hour === 0 && utc8Minute === 10) {
 			logDebug('Starting daily horoscope preload at 00:10');
 			try {
@@ -1242,8 +1391,23 @@ export default {
 			} catch (error) {
 				logDebug('Error during daily horoscope preload', { error });
 			}
-		} else {
-			logDebug('Skipping preload - not 00:10 UTC+8', { utc8Hour, utc8Minute });
+		}
+
+		// 每兩小時執行文案預載（在偶數小時的10分鐘執行）
+		if (utc8Hour % 2 === 0 && utc8Minute === 10) {
+			logDebug('Starting copywriting preload', { utc8Hour });
+			try {
+				await preloadAllCopywritings(env.COPYWRITING_CACHE);
+				logDebug('Copywriting preload completed successfully');
+			} catch (error) {
+				logDebug('Error during copywriting preload', { error });
+			}
+		}
+
+		if (utc8Hour % 2 !== 0 || utc8Minute !== 10) {
+			if (!(utc8Hour === 0 && utc8Minute === 10)) {
+				logDebug('Skipping preload - not scheduled time', { utc8Hour, utc8Minute });
+			}
 		}
 	},
 };
