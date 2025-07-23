@@ -66,14 +66,14 @@ export default {
 			utc8Minute,
 		});
 
-		// 每天 UTC+8 00:10 執行運勢預載
-		if (utc8Hour === 0 && utc8Minute === 10) {
-			logDebug('Starting daily horoscope preload at 00:10');
+		// 每小時的 15 分和 45 分執行運勢預載
+		if (utc8Minute === 15 || utc8Minute === 45) {
+			logDebug('Starting horoscope preload', { utc8Hour, utc8Minute });
 			try {
 				await preloadAllHoroscopes(env.HOROSCOPE_CACHE);
-				logDebug('Daily horoscope preload completed successfully');
+				logDebug('Horoscope preload completed successfully');
 			} catch (error) {
-				logDebug('Error during daily horoscope preload', { error });
+				logDebug('Error during horoscope preload', { error });
 			}
 		}
 
@@ -88,10 +88,12 @@ export default {
 			}
 		}
 
-		if (utc8Hour % 2 !== 0 || utc8Minute !== 10) {
-			if (!(utc8Hour === 0 && utc8Minute === 10)) {
-				logDebug('Skipping preload - not scheduled time', { utc8Hour, utc8Minute });
-			}
+		// 如果不是任何預載時間，記錄跳過訊息
+		const isHoroscopeTime = utc8Minute === 15 || utc8Minute === 45;
+		const isCopywritingTime = utc8Hour % 2 === 0 && utc8Minute === 10;
+
+		if (!isHoroscopeTime && !isCopywritingTime) {
+			logDebug('Skipping preload - not scheduled time', { utc8Hour, utc8Minute });
 		}
 	},
 };
