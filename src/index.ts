@@ -1125,28 +1125,20 @@ async function formatHoroscopeReply(data: HoroscopeData, zodiacKey: string): Pro
 	const displayDate = DateUtils.getTodayDate();
 
 	return `今日運勢 ( ${displayDate} ) ${zodiacKey}座
-
 📝 今日提醒：${data.data.notice}
 ✅ 宜：${data.data.yi}
 ❌ 忌：${data.data.ji}
-
 💕 愛情運 (${data.data.love})
 ${data.data.love_text}
-
 💼 事業運 (${data.data.work})
 ${truncateToFirstPeriod(data.data.work_text)}
-
 💰 金錢運 (${data.data.money})
 ${truncateToFirstPeriod(data.data.money_text)}
-
 🏥 健康運 (${data.data.health})
 ${truncateToFirstPeriod(data.data.health_text)}
-
 🍀 幸運數字：${data.data.lucky_number}
 🎨 幸運顏色：${data.data.lucky_color}
-🌟 幸運星座：${data.data.lucky_star}
-
-中年人請注重自身健康：stanley、許雲藏、陳逸謙、江阿姨。`;
+🌟 幸運星座：${data.data.lucky_star}`;
 }
 
 async function handleSexyText(replyToken: string, env: Env): Promise<void> {
@@ -1176,19 +1168,14 @@ async function getCustomHoroscopeForUser(zodiacKey: string): Promise<string> {
 📝 今日提醒：多做愛
 ✅ 宜：做愛
 ❌ 忌：不做愛
-
 💕 愛情運 (100%)
 今天是個適合做愛的日子，單身的可以約炮，有伴的可以盡情享受。
-
 💼 事業運 (100%)
 今天是個適合做愛的日子，做愛能提升你的工作效率和創造力。
-
 💰 金錢運 (100%)
 今天是個適合做愛的日子，做愛後財運會大幅提升。
-
 🏥 健康運 (100%)
 今天是個適合做愛的日子，做愛是最好的運動和保健方式。
-
 🍀 幸運數字：69
 🎨 幸運顏色：精液白
 🌟 幸運星座：可憐沒有`;
