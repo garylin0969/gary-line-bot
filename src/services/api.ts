@@ -1,5 +1,5 @@
 import { CONFIG } from '../config/constants.js';
-import { TextResponse, RandomImageResponse, LineMessage } from '../types/index.js';
+import { TextResponse, RandomImageResponse, RandomVideoResponse, LineMessage } from '../types/index.js';
 import { logDebug } from '../utils/common.js';
 
 // 取得文字內容
@@ -58,6 +58,34 @@ export async function fetchRandomImage(): Promise<string | null> {
 	}
 }
 
+// 取得隨機影片 URL
+export async function fetchRandomVideo(): Promise<string | null> {
+	try {
+		logDebug(`Fetching random video from API: ${CONFIG.API.RANDOM_GIRL_VIDEO}`);
+		const response = await fetch(CONFIG.API.RANDOM_GIRL_VIDEO);
+		logDebug(`Random video API response status: ${response.status}`);
+
+		if (!response.ok) {
+			logDebug(`API request failed with status: ${response.status}`);
+			return null;
+		}
+
+		const videoData = (await response.json()) as RandomVideoResponse;
+		logDebug(`Random video API response data:`, videoData);
+
+		if (videoData.code === 200 && videoData.data?.video) {
+			logDebug(`Successfully fetched random video: ${videoData.data.video}`);
+			return videoData.data.video;
+		}
+
+		logDebug(`API request was not successful, code: ${videoData.code}`);
+		return null;
+	} catch (error) {
+		logDebug(`Error fetching random video:`, error);
+		return null;
+	}
+}
+
 // 發送 LINE 訊息
 export async function sendLineMessages(replyToken: string, messages: LineMessage[], accessToken: string): Promise<void> {
 	await fetch(CONFIG.API.LINE_REPLY, {
@@ -98,7 +126,7 @@ export async function sendVideoReply(replyToken: string, videoUrl: string, acces
 			{
 				type: 'video',
 				originalContentUrl: videoUrl,
-				previewImageUrl: videoUrl.replace('.mp4', '_preview.jpg'), // 嘗試使用預覽圖，如果沒有則使用同樣的 URL
+				previewImageUrl: videoUrl, // 直接使用影片本身的URL作為預覽圖
 			},
 		],
 		accessToken

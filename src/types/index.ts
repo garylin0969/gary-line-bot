@@ -44,6 +44,16 @@ export interface TextResponse {
 	};
 }
 
+export interface RandomVideoResponse {
+	code: number;
+	data: {
+		video: string;
+	};
+	message: string;
+	elapsedTime: string;
+	providerName: string;
+}
+
 // 占星相關型別定義
 export interface HoroscopeData {
 	constellation: string;

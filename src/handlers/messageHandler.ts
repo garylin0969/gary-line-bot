@@ -2,7 +2,7 @@ import * as OpenCC from 'opencc-js';
 import { LineEvent, Env } from '../types/index.js';
 import { KEY_WORDS_REPLY, CONFIG } from '../config/constants.js';
 import { logDebug } from '../utils/common.js';
-import { sendReply, sendImageReply, sendVideoReply, fetchText } from '../services/api.js';
+import { sendReply, sendImageReply, sendVideoReply, fetchText, fetchRandomVideo } from '../services/api.js';
 import {
 	findZodiacMatch,
 	getCachedHoroscope,
@@ -310,8 +310,14 @@ async function handleDogText(replyToken: string, env: Env): Promise<void> {
 // 處理小姊姊影片
 async function handleLittleSisterVideo(replyToken: string, env: Env): Promise<void> {
 	try {
-		await sendVideoReply(replyToken, CONFIG.API.RANDOM_GIRL_VIDEO, env.LINE_CHANNEL_ACCESS_TOKEN);
-		logDebug('Video sent successfully');
+		const videoUrl = await fetchRandomVideo();
+		if (videoUrl) {
+			await sendVideoReply(replyToken, videoUrl, env.LINE_CHANNEL_ACCESS_TOKEN);
+			logDebug('Video sent successfully');
+		} else {
+			logDebug('Failed to fetch video URL');
+			await sendReply(replyToken, '影片取得失敗，請稍後再試', env.LINE_CHANNEL_ACCESS_TOKEN);
+		}
 	} catch (error) {
 		logDebug('Error handling little sister video', { error });
 		await sendReply(replyToken, '影片發送失敗，請稍後再試', env.LINE_CHANNEL_ACCESS_TOKEN);
