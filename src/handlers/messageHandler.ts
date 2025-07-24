@@ -74,6 +74,15 @@ function isCommand(text: string): boolean {
 	const isNSFW = text === '色色';
 	const isKeyWords = Boolean(Object?.keys(KEY_WORDS_REPLY)?.find((key) => normalizedText?.includes(key)));
 	const isLittleSister = normalizedText === '!小姊姊' || normalizedText === '!小姐姐';
+	const isGay =
+		normalizedText === '!gay' ||
+		normalizedText === '!Gay' ||
+		normalizedText === 'gay' ||
+		normalizedText === 'Gay' ||
+		normalizedText === '!甲' ||
+		normalizedText === '甲' ||
+		normalizedText === '!甲圖' ||
+		normalizedText === '甲圖';
 	const result =
 		isRoll ||
 		isRollNum ||
@@ -86,7 +95,8 @@ function isCommand(text: string): boolean {
 		isWhiteSilk ||
 		isLoveCopywriting ||
 		isFunnyCopywriting ||
-		isLittleSister;
+		isLittleSister ||
+		isGay;
 
 	logDebug('Command detection', {
 		originalText: text,
@@ -103,6 +113,7 @@ function isCommand(text: string): boolean {
 		isNSFW,
 		isKeyWords,
 		isLittleSister,
+		isGay,
 		result,
 	});
 
@@ -196,6 +207,22 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 	if (normalizedText === '!小姊姊' || normalizedText === '!小姐姐') {
 		logDebug('Detected little sister video command');
 		await handleLittleSisterVideo(event.replyToken!, env);
+		return;
+	}
+
+	// 處理「甲」命令
+	if (
+		normalizedText === '!gay' ||
+		normalizedText === 'gay' ||
+		normalizedText === '!Gay' ||
+		normalizedText === 'Gay' ||
+		normalizedText === '!甲' ||
+		normalizedText === '甲' ||
+		normalizedText === '!甲圖' ||
+		normalizedText === '甲圖'
+	) {
+		logDebug('Detected gay command');
+		await handleGay(event.replyToken!, env);
 		return;
 	}
 
@@ -321,5 +348,24 @@ async function handleLittleSisterVideo(replyToken: string, env: Env): Promise<vo
 	} catch (error) {
 		logDebug('Error handling little sister video', { error });
 		await sendReply(replyToken, '影片發送失敗，請稍後再試', env.LINE_CHANNEL_ACCESS_TOKEN);
+	}
+}
+
+// 處理甲圖
+async function handleGay(replyToken: string, env: Env): Promise<void> {
+	try {
+		// 隨機選擇 1-20 之間的數字
+		const randomNumber = Math.floor(Math.random() * 20) + 1;
+
+		// 構建圖片 URL（透過 Cloudflare Workers 的靜態資源）
+		// 使用 Worker 的域名來存取靜態資源
+		const imageUrl = `https://garylin0969.github.io/json-gather/data/images/gay/gay${randomNumber}.jpg`;
+
+		logDebug('Sending gay image', { randomNumber, imageUrl });
+		await sendImageReply(replyToken, imageUrl, env.LINE_CHANNEL_ACCESS_TOKEN);
+		logDebug('Gay image sent successfully');
+	} catch (error) {
+		logDebug('Error handling gay image', { error });
+		await sendReply(replyToken, '圖片發送失敗，請稍後再試', env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
 }
