@@ -15,6 +15,11 @@
 			"binding": "HOROSCOPE_CACHE",
 			"id": "7ed885addeee4c279c2fe892df02947d",
 			"preview_id": "37456c0699ba4f169629d30f7e7962a8"
+		},
+		{
+			"binding": "COPYWRITING_CACHE",
+			"id": "6b1b1f7290b345b198f105ce305f7ce9",
+			"preview_id": "ecfe3257514f48039506832104ff9669"
 		}
 	],
 	"durable_objects": {
