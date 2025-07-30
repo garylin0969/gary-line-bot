@@ -2,6 +2,150 @@ import { GameState } from '../types/index.js';
 import { CONFIG } from '../config/constants.js';
 import { logDebug } from '../utils/common.js';
 
+// 遊戲狀態管理器
+class GameStateManager {
+	// 檢查遊戲是否過期
+	static isGameExpired(game: GameState): boolean {
+		return Date.now() - game.startedAt > CONFIG.ROLL.TIMEOUT;
+	}
+
+	// 檢查遊戲是否已滿
+	static isGameFull(game: GameState): boolean {
+		return Object.keys(game.players).length >= game.maxPlayers;
+	}
+
+	// 檢查玩家是否已經骰過
+	static hasPlayerRolled(game: GameState, userId: string): boolean {
+		return game.players[userId] !== undefined;
+	}
+
+	// 生成隨機點數
+	static generateRandomPoint(): number {
+		return Math.floor(Math.random() * 100) + 1;
+	}
+}
+
+// 遊戲操作處理器
+class GameActionHandler {
+	// 建立新遊戲
+	static createGame(games: Record<string, GameState>, groupId: string, maxPlayers: number): GameState {
+		const game: GameState = {
+			players: {},
+			maxPlayers,
+			startedAt: Date.now(),
+		};
+
+		games[groupId] = game;
+		logDebug('DO: Created new game', {
+			groupId,
+			maxPlayers,
+			game,
+		});
+
+		return game;
+	}
+
+	// 獲取遊戲狀態
+	static getGame(games: Record<string, GameState>, groupId: string): GameState | null {
+		const game = games[groupId];
+
+		if (!game || GameStateManager.isGameExpired(game)) {
+			if (game) {
+				delete games[groupId];
+			}
+			logDebug('DO: Game not found or expired', {
+				groupId,
+				hasGame: !!game,
+				timeElapsed: game ? Date.now() - game.startedAt : null,
+			});
+			return null;
+		}
+
+		logDebug('DO: Retrieved game', {
+			groupId,
+			game,
+		});
+
+		return game;
+	}
+
+	// 執行骰子
+	static rollDice(games: Record<string, GameState>, groupId: string, userId: string): { success: boolean; data?: any; error?: string } {
+		const game = games[groupId];
+
+		if (!game || GameStateManager.isGameExpired(game)) {
+			delete games[groupId];
+			logDebug('DO: Game not found or expired during roll', {
+				groupId,
+				hasGame: !!game,
+				timeElapsed: game ? Date.now() - game.startedAt : null,
+			});
+			return { success: false, error: 'Game not found or expired' };
+		}
+
+		const currentPlayerCount = Object.keys(game.players).length;
+		logDebug('DO: Current game state before roll', {
+			groupId,
+			userId,
+			currentPlayerCount,
+			maxPlayers: game.maxPlayers,
+			players: game.players,
+		});
+
+		if (GameStateManager.isGameFull(game)) {
+			logDebug('DO: Game is full', {
+				groupId,
+				currentPlayerCount,
+				maxPlayers: game.maxPlayers,
+			});
+			return { success: false, error: 'Game is full' };
+		}
+
+		if (GameStateManager.hasPlayerRolled(game, userId)) {
+			logDebug('DO: User already rolled', {
+				groupId,
+				userId,
+				existingRoll: game.players[userId],
+			});
+			return { success: false, error: 'Already rolled' };
+		}
+
+		const point = GameStateManager.generateRandomPoint();
+		game.players[userId] = point;
+
+		const newPlayerCount = Object.keys(game.players).length;
+		const isComplete = newPlayerCount === game.maxPlayers;
+
+		logDebug('DO: Roll completed', {
+			groupId,
+			userId,
+			point,
+			newPlayerCount,
+			maxPlayers: game.maxPlayers,
+			isComplete,
+			allPlayers: game.players,
+		});
+
+		const response = {
+			point,
+			isComplete,
+			players: game.players,
+		};
+
+		if (isComplete) {
+			logDebug('DO: Game completed, cleaning up', {
+				groupId,
+				finalState: game,
+				playerCount: newPlayerCount,
+				maxPlayers: game.maxPlayers,
+			});
+			delete games[groupId];
+		}
+
+		return { success: true, data: response };
+	}
+}
+
 // Durable Object for Game State
 export class GameStateObject {
 	private state: DurableObjectState;
@@ -20,11 +164,11 @@ export class GameStateObject {
 			this.games = stored;
 			// 清理過期的遊戲
 			for (const [groupId, game] of Object.entries(this.games)) {
-				if (Date.now() - game.startedAt > CONFIG.ROLL.TIMEOUT) {
+				if (GameStateManager.isGameExpired(game)) {
 					delete this.games[groupId];
 				}
 			}
-			await this.state.storage.put('games', this.games);
+			await this.saveState();
 		}
 	}
 
@@ -42,128 +186,54 @@ export class GameStateObject {
 		}
 
 		const action = url.searchParams.get('action');
-		if (action === 'create') {
-			const maxPlayers = parseInt(url.searchParams.get('maxPlayers') || '0');
-			if (maxPlayers < 2 || maxPlayers > CONFIG.ROLL.MAX_PLAYERS) {
-				return new Response('Invalid maxPlayers', { status: 400 });
+
+		try {
+			switch (action) {
+				case 'create':
+					return await this.handleCreateAction(groupId, url);
+				case 'get':
+					return await this.handleGetAction(groupId);
+				case 'roll':
+					return await this.handleRollAction(groupId, url);
+				default:
+					return new Response('Invalid action', { status: 400 });
 			}
+		} catch (error) {
+			logDebug('DO: Error handling request', { action, groupId, error });
+			return new Response('Internal server error', { status: 500 });
+		}
+	}
 
-			this.games[groupId] = {
-				players: {},
-				maxPlayers,
-				startedAt: Date.now(),
-			};
-			logDebug('DO: Created new game', {
-				groupId,
-				maxPlayers,
-				game: this.games[groupId],
-			});
-			await this.saveState();
-			return new Response(JSON.stringify(this.games[groupId]));
-		} else if (action === 'get') {
-			const game = this.games[groupId];
-			if (!game || Date.now() - game.startedAt > CONFIG.ROLL.TIMEOUT) {
-				delete this.games[groupId];
-				await this.saveState();
-				logDebug('DO: Game not found or expired', {
-					groupId,
-					hasGame: !!game,
-					timeElapsed: game ? Date.now() - game.startedAt : null,
-				});
-				return new Response(null);
-			}
-			logDebug('DO: Retrieved game', {
-				groupId,
-				game,
-			});
-			return new Response(JSON.stringify(game));
-		} else if (action === 'roll') {
-			const game = this.games[groupId];
-			if (!game || Date.now() - game.startedAt > CONFIG.ROLL.TIMEOUT) {
-				delete this.games[groupId];
-				await this.saveState();
-				logDebug('DO: Game not found or expired during roll', {
-					groupId,
-					hasGame: !!game,
-					timeElapsed: game ? Date.now() - game.startedAt : null,
-				});
-				return new Response(null);
-			}
-
-			const userId = url.searchParams.get('userId');
-			if (!userId) {
-				return new Response('Missing userId', { status: 400 });
-			}
-
-			const currentPlayerCount = Object.keys(game.players).length;
-			logDebug('DO: Current game state before roll', {
-				groupId,
-				userId,
-				currentPlayerCount,
-				maxPlayers: game.maxPlayers,
-				players: game.players,
-			});
-
-			if (currentPlayerCount >= game.maxPlayers) {
-				logDebug('DO: Game is full', {
-					groupId,
-					currentPlayerCount,
-					maxPlayers: game.maxPlayers,
-				});
-				return new Response('Game is full', { status: 400 });
-			}
-
-			if (game.players[userId] !== undefined) {
-				logDebug('DO: User already rolled', {
-					groupId,
-					userId,
-					existingRoll: game.players[userId],
-				});
-				return new Response('Already rolled', { status: 400 });
-			}
-
-			const point = Math.floor(Math.random() * 100) + 1;
-			game.players[userId] = point;
-
-			// 重新計算玩家數量，因為我們剛剛添加了新玩家
-			const newPlayerCount = Object.keys(game.players).length;
-			const isComplete = newPlayerCount === game.maxPlayers;
-
-			logDebug('DO: Roll completed', {
-				groupId,
-				userId,
-				point,
-				newPlayerCount,
-				maxPlayers: game.maxPlayers,
-				isComplete,
-				allPlayers: game.players,
-			});
-
-			const response = {
-				point,
-				isComplete,
-				players: game.players,
-			};
-
-			if (isComplete) {
-				logDebug('DO: Game completed, cleaning up', {
-					groupId,
-					finalState: game,
-					playerCount: newPlayerCount,
-					maxPlayers: game.maxPlayers,
-				});
-			}
-
-			await this.saveState();
-
-			if (isComplete) {
-				delete this.games[groupId];
-				await this.saveState();
-			}
-
-			return new Response(JSON.stringify(response));
+	private async handleCreateAction(groupId: string, url: URL): Promise<Response> {
+		const maxPlayers = parseInt(url.searchParams.get('maxPlayers') || '0');
+		if (maxPlayers < 2 || maxPlayers > CONFIG.ROLL.MAX_PLAYERS) {
+			return new Response('Invalid maxPlayers', { status: 400 });
 		}
 
-		return new Response('Invalid action', { status: 400 });
+		const game = GameActionHandler.createGame(this.games, groupId, maxPlayers);
+		await this.saveState();
+		return new Response(JSON.stringify(game));
+	}
+
+	private async handleGetAction(groupId: string): Promise<Response> {
+		const game = GameActionHandler.getGame(this.games, groupId);
+		await this.saveState();
+		return new Response(game ? JSON.stringify(game) : null);
+	}
+
+	private async handleRollAction(groupId: string, url: URL): Promise<Response> {
+		const userId = url.searchParams.get('userId');
+		if (!userId) {
+			return new Response('Missing userId', { status: 400 });
+		}
+
+		const result = GameActionHandler.rollDice(this.games, groupId, userId);
+		await this.saveState();
+
+		if (result.success) {
+			return new Response(JSON.stringify(result.data));
+		} else {
+			return new Response(result.error, { status: 400 });
+		}
 	}
 }

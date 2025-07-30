@@ -26,6 +26,28 @@ async function getConverter(): Promise<(text: string) => Promise<string>> {
 	return converter;
 }
 
+// 命令類型枚舉
+enum CommandType {
+	ROLL = 'roll',
+	ROLL_NUM = 'rollnum',
+	DRAW = 'draw',
+	BLACK_SILK = 'black_silk',
+	WHITE_SILK = 'white_silk',
+	NSFW = 'nsfw',
+	LOVE_COPYWRITING = 'love_copywriting',
+	FUNNY_COPYWRITING = 'funny_copywriting',
+	ROMANTIC_COPYWRITING = 'romantic_copywriting',
+	GAY = 'gay',
+	KEYWORDS = 'keywords',
+}
+
+// 命令檢測結果
+interface CommandDetection {
+	type: CommandType;
+	text: string;
+	normalizedText: string;
+}
+
 // 主要訊息處理函數
 export async function handleMessage(event: LineEvent, env: Env, ctx: ExecutionContext): Promise<void> {
 	try {
@@ -39,13 +61,11 @@ export async function handleMessage(event: LineEvent, env: Env, ctx: ExecutionCo
 		const text = event.message.text.trim();
 		logDebug('Processing message', { text });
 
-		// 先檢查是否為命令
-		const isCmd = isCommand(text);
-		logDebug('Command check result', { text, isCommand: isCmd });
-
-		if (isCmd) {
-			logDebug('Handling command', { text });
-			await handleCommand(event, env, ctx);
+		// 檢查是否為命令
+		const command = detectCommand(text);
+		if (command) {
+			logDebug('Handling command', { command });
+			await handleCommand(event, command, env, ctx);
 			return;
 		}
 
@@ -57,163 +77,142 @@ export async function handleMessage(event: LineEvent, env: Env, ctx: ExecutionCo
 	}
 }
 
-// 檢查是否為命令
-function isCommand(text: string): boolean {
-	// 先將全形符號轉換為半形符號
-	const normalizedText = text?.replace(/[！]/g, '!')?.toLocaleLowerCase();
+// 檢測命令類型
+function detectCommand(text: string): CommandDetection | null {
+	const normalizedText = text?.replace(/[！]/g, '!')?.toLowerCase();
 
-	const isRoll = normalizedText === '!roll';
-	const isRollNum = normalizedText.startsWith('!rollnum');
-	const isDraw = normalizedText === '抽';
-	const isBlackSilk = normalizedText === '!黑絲';
-	const isWhiteSilk = normalizedText === '!白絲';
-	const isRomanticCopywriting = normalizedText === '!騷話' || normalizedText === '!骚话';
-	const isLoveCopywriting = normalizedText === '!情話';
-	const isFunnyCopywriting = normalizedText === '!幹話';
-	const isNSFW = text === '色色';
-	const isKeyWords = Boolean(Object?.keys(KEY_WORDS_REPLY)?.find((key) => normalizedText?.includes(key)));
+	// 遊戲命令
+	if (normalizedText === '!roll') {
+		return { type: CommandType.ROLL, text, normalizedText };
+	}
+	if (normalizedText.startsWith('!rollnum')) {
+		return { type: CommandType.ROLL_NUM, text, normalizedText };
+	}
 
-	const isGay =
-		normalizedText === '!gay' ||
-		normalizedText === '!Gay' ||
-		normalizedText === 'gay' ||
-		normalizedText === 'Gay' ||
-		normalizedText === '!甲' ||
-		normalizedText === '甲' ||
-		normalizedText === '!甲圖' ||
-		normalizedText === '甲圖';
-	const result =
-		isRoll ||
-		isRollNum ||
-		isDraw ||
-		isRomanticCopywriting ||
-		isNSFW ||
-		isKeyWords ||
-		isBlackSilk ||
-		isWhiteSilk ||
-		isLoveCopywriting ||
-		isFunnyCopywriting ||
-		isGay;
+	// 圖片命令
+	if (text === '抽') {
+		return { type: CommandType.DRAW, text, normalizedText };
+	}
+	if (normalizedText === '!黑絲') {
+		return { type: CommandType.BLACK_SILK, text, normalizedText };
+	}
+	if (normalizedText === '!白絲') {
+		return { type: CommandType.WHITE_SILK, text, normalizedText };
+	}
+	if (text === '色色') {
+		return { type: CommandType.NSFW, text, normalizedText };
+	}
 
-	logDebug('Command detection', {
-		originalText: text,
-		normalizedText,
-		isRoll,
-		isRollNum,
-		isDraw,
-		isBlackSilk,
-		isWhiteSilk,
-		isRomanticCopywriting,
-		isLoveCopywriting,
-		isFunnyCopywriting,
-		isNSFW,
-		isKeyWords,
-		isGay,
-		result,
-	});
+	// 文案命令
+	if (normalizedText === '!情話') {
+		return { type: CommandType.LOVE_COPYWRITING, text, normalizedText };
+	}
+	if (normalizedText === '!幹話') {
+		return { type: CommandType.FUNNY_COPYWRITING, text, normalizedText };
+	}
+	if (normalizedText === '!騷話') {
+		return { type: CommandType.ROMANTIC_COPYWRITING, text, normalizedText };
+	}
 
-	return result;
+	// Gay命令
+	if (isGayCommand(normalizedText)) {
+		return { type: CommandType.GAY, text, normalizedText };
+	}
+
+	// 關鍵字命令
+	if (hasKeywordMatch(text)) {
+		return { type: CommandType.KEYWORDS, text, normalizedText };
+	}
+
+	return null;
+}
+
+// 檢查是否為甲相關命令
+function isGayCommand(normalizedText: string): boolean {
+	const gayCommands = ['!gay', '!Gay', 'gay', 'Gay', '!甲', '甲', '!甲圖', '甲圖'];
+	return gayCommands.includes(normalizedText);
+}
+
+// 檢查關鍵字匹配
+function hasKeywordMatch(text: string): boolean {
+	return Object.keys(KEY_WORDS_REPLY).some((key) => text.includes(key));
 }
 
 // 處理命令
-async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-	const text = event.message!.text.trim();
-	// 先將全形符號轉換為半形符號
-	const normalizedText = text.replace(/[！]/g, '!');
-	logDebug('Starting command handling', { text, normalizedText });
+async function handleCommand(event: LineEvent, command: CommandDetection, env: Env, ctx: ExecutionContext): Promise<void> {
+	const { type, text, normalizedText } = command;
+	logDebug('Starting command handling', { type, text, normalizedText });
 
-	// 處理遊戲命令
-	if (normalizedText === '!roll' || normalizedText.startsWith('!rollnum')) {
-		logDebug('Detected game command', { normalizedText });
-		await handleGameCommand(event, env, ctx);
-		return;
-	}
+	try {
+		switch (type) {
+			case CommandType.ROLL:
+			case CommandType.ROLL_NUM:
+				await handleGameCommand(event, env, ctx);
+				break;
 
-	// 處理「抽」命令
-	if (text === '抽') {
-		logDebug('Detected draw command');
-		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_GIRL_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
-		return;
-	}
+			case CommandType.DRAW:
+				await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_GIRL_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
+				break;
 
-	// 處理「黑絲」命令
-	if (normalizedText === '!黑絲') {
-		logDebug('Detected black silk command');
-		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_BLACK_SILK_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
-		return;
-	}
+			case CommandType.BLACK_SILK:
+				await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_BLACK_SILK_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
+				break;
 
-	// 處理「白絲」命令
-	if (normalizedText === '!白絲') {
-		logDebug('Detected white silk command');
-		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_WHITE_SILK_IMAGE + '?rand=' + Math.random(), env.LINE_CHANNEL_ACCESS_TOKEN);
-		return;
-	}
+			case CommandType.WHITE_SILK:
+				await sendImageReply(
+					event.replyToken!,
+					CONFIG.API.RANDOM_WHITE_SILK_IMAGE + '?rand=' + Math.random(),
+					env.LINE_CHANNEL_ACCESS_TOKEN
+				);
+				break;
 
-	// 處理「色色」命令
-	if (text === '色色') {
-		logDebug('Detected NSFW command');
-		await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_PORN_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
-		return;
-	}
+			case CommandType.NSFW:
+				await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_PORN_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
+				break;
 
-	// 處理「情話」命令
-	if (normalizedText === '!情話') {
-		logDebug('Detected love copywriting command');
-		const copywritingText = await getRandomCopywritingText(CONFIG.API.LOVE_COPYWRITING_TEXT, 'love_copywriting', env.COPYWRITING_CACHE);
-		if (copywritingText) {
-			await sendReply(event.replyToken!, copywritingText, env.LINE_CHANNEL_ACCESS_TOKEN);
+			case CommandType.LOVE_COPYWRITING:
+				await handleCopywritingCommand(event.replyToken!, CONFIG.API.LOVE_COPYWRITING_TEXT, 'love_copywriting', env);
+				break;
+
+			case CommandType.FUNNY_COPYWRITING:
+				await handleCopywritingCommand(event.replyToken!, CONFIG.API.FUNNY_COPYWRITING_TEXT, 'funny_copywriting', env);
+				break;
+
+			case CommandType.ROMANTIC_COPYWRITING:
+				await handleCopywritingCommand(event.replyToken!, CONFIG.API.ROMANTIC_COPYWRITING_TEXT, 'romantic_copywriting', env);
+				break;
+
+			case CommandType.GAY:
+				await handleGay(event.replyToken!, env);
+				break;
+
+			case CommandType.KEYWORDS:
+				await handleKeywordsCommand(event.replyToken!, text, env);
+				break;
+
+			default:
+				logDebug('Unknown command type', { type });
 		}
-		return;
+	} catch (error) {
+		logDebug('Error handling command', { type, error });
+		await sendReply(event.replyToken!, '處理命令時發生錯誤', env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
+}
 
-	// 處理「幹話」命令
-	if (normalizedText === '!幹話') {
-		logDebug('Detected funny copywriting command');
-		const copywritingText = await getRandomCopywritingText(CONFIG.API.FUNNY_COPYWRITING_TEXT, 'funny_copywriting', env.COPYWRITING_CACHE);
-		if (copywritingText) {
-			await sendReply(event.replyToken!, copywritingText, env.LINE_CHANNEL_ACCESS_TOKEN);
-		}
-		return;
+// 處理文案命令
+async function handleCopywritingCommand(replyToken: string, apiUrl: string, cacheKey: string, env: Env): Promise<void> {
+	const copywritingText = await getRandomCopywritingText(apiUrl, cacheKey, env.COPYWRITING_CACHE);
+	if (copywritingText) {
+		await sendReply(replyToken, copywritingText, env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
+}
 
-	// 處理「騷話」命令
-	if (normalizedText === '!騷話') {
-		logDebug('Detected sexy text command');
-		const copywritingText = await getRandomCopywritingText(
-			CONFIG.API.ROMANTIC_COPYWRITING_TEXT,
-			'romantic_copywriting',
-			env.COPYWRITING_CACHE
-		);
-		if (copywritingText) {
-			await sendReply(event.replyToken!, copywritingText, env.LINE_CHANNEL_ACCESS_TOKEN);
-		}
-		return;
+// 處理關鍵字命令
+async function handleKeywordsCommand(replyToken: string, text: string, env: Env): Promise<void> {
+	const matchedKey = Object.keys(KEY_WORDS_REPLY).find((key) => text.includes(key));
+	if (matchedKey) {
+		await sendReply(replyToken, KEY_WORDS_REPLY[matchedKey as keyof typeof KEY_WORDS_REPLY], env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
-
-	// 處理「甲」命令
-	if (
-		normalizedText === '!gay' ||
-		normalizedText === 'gay' ||
-		normalizedText === '!Gay' ||
-		normalizedText === 'Gay' ||
-		normalizedText === '!甲' ||
-		normalizedText === '甲' ||
-		normalizedText === '!甲圖' ||
-		normalizedText === '甲圖'
-	) {
-		logDebug('Detected gay command');
-		await handleGay(event.replyToken!, env);
-		return;
-	}
-
-	// 處理「關鍵字」命令
-	if (Object?.keys(KEY_WORDS_REPLY)?.find((key) => text?.includes(key))) {
-		logDebug('Detected key words command');
-		await sendReply(event.replyToken!, KEY_WORDS_REPLY[text as keyof typeof KEY_WORDS_REPLY], env.LINE_CHANNEL_ACCESS_TOKEN);
-		return;
-	}
-	logDebug('No matching command handler found', { normalizedText });
 }
 
 // 處理遊戲命令
@@ -270,7 +269,6 @@ async function handleNormalMessage(text: string, replyToken: string, userId: str
 async function handleHoroscope(zodiacKey: string, replyToken: string, userId: string, env: Env, ctx: ExecutionContext): Promise<void> {
 	// 檢查是否為許雲藏的訊息
 	if (userId === 'U10e6659922346d74db502c05e908bc55') {
-		// 請替換成許雲藏的實際 LINE User ID
 		const customMessage = await getCustomHoroscopeForUser(zodiacKey);
 		await sendReply(replyToken, customMessage, env.LINE_CHANNEL_ACCESS_TOKEN);
 		return;
@@ -310,8 +308,7 @@ async function handleGay(replyToken: string, env: Env): Promise<void> {
 		// 隨機選擇 1-20 之間的數字
 		const randomNumber = Math.floor(Math.random() * 20) + 1;
 
-		// 構建圖片 URL（透過 Cloudflare Workers 的靜態資源）
-		// 使用 Worker 的域名來存取靜態資源
+		// 構建圖片 URL
 		const imageUrl = `https://garylin0969.github.io/json-gather/data/images/gay/gay${randomNumber}.jpg`;
 
 		logDebug('Sending gay image', { randomNumber, imageUrl });

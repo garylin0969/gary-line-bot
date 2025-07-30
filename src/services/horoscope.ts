@@ -14,6 +14,34 @@ async function getConverter(): Promise<(text: string) => Promise<string>> {
 	return converter;
 }
 
+// 快取鍵生成器
+class CacheKeyGenerator {
+	static getHoroscopeKey(zodiacKey: string): string {
+		const todayKey = DateUtils.getTodayKey();
+		return `${todayKey}_${zodiacKey}`;
+	}
+}
+
+// 日期驗證器
+class DateValidator {
+	static isToday(dateString: string): boolean {
+		const cachedDate = dateString; // YYYY-MM-DD 格式
+		const today = DateUtils.getTodayDate(); // MM/DD 格式
+
+		// 將 API 日期格式 (YYYY-MM-DD) 轉換為 MM/DD 格式進行比較
+		const cachedDateFormatted = cachedDate.substring(5).replace('-', '/'); // "2025-07-23" -> "07/23"
+
+		logDebug('Checking cached horoscope date', {
+			cachedDate,
+			cachedDateFormatted,
+			today,
+			isToday: cachedDateFormatted === today,
+		});
+
+		return cachedDateFormatted === today;
+	}
+}
+
 // 取得所有占星資料
 export async function fetchAllHoroscopesData(): Promise<HoroscopeResponse | null> {
 	try {
@@ -51,67 +79,57 @@ export async function fetchHoroscopeData(zodiacEn: string): Promise<HoroscopeDat
 
 // 取得快取的占星資料
 export async function getCachedHoroscope(kv: KVNamespace, zodiacKey: string): Promise<CachedHoroscope | null> {
-	const todayKey = DateUtils.getTodayKey();
-	const cacheKey = `${todayKey}_${zodiacKey}`;
+	const cacheKey = CacheKeyGenerator.getHoroscopeKey(zodiacKey);
 
 	try {
 		const cached = await kv.get(cacheKey);
-		if (cached) {
-			const parsed = JSON.parse(cached) as CachedHoroscope;
-
-			// 檢查快取資料的日期是否為今日
-			const cachedDate = parsed.data.data.date; // YYYY-MM-DD 格式
-			const today = DateUtils.getTodayDate(); // MM/DD 格式
-
-			// 將 API 日期格式 (YYYY-MM-DD) 轉換為 MM/DD 格式進行比較
-			const cachedDateFormatted = cachedDate.substring(5).replace('-', '/'); // "2025-07-23" -> "07/23"
-
-			logDebug('Checking cached horoscope date', {
-				zodiacKey,
-				cachedDate,
-				cachedDateFormatted,
-				today,
-				isToday: cachedDateFormatted === today,
-			});
-
-			// 如果快取資料是今日的，直接返回
-			if (cachedDateFormatted === today) {
-				logDebug('Cache hit for horoscope (today)', { zodiacKey });
-				return parsed;
-			} else {
-				// 快取資料不是今日的，需要重新獲取
-				logDebug('Cache data is outdated, fetching fresh data', { zodiacKey, cachedDate, cachedDateFormatted, today });
-				const zodiacEn = zodiacMap[zodiacKey];
-				const freshData = await fetchHoroscopeData(zodiacEn);
-
-				if (freshData && freshData.success) {
-					// 更新快取
-					await cacheHoroscope(kv, zodiacKey, freshData);
-					logDebug('Updated cache with fresh horoscope data', { zodiacKey });
-
-					return {
-						data: freshData,
-						cachedAt: new Date().toISOString(),
-					};
-				} else {
-					logDebug('Failed to fetch fresh horoscope data, returning outdated cache', { zodiacKey });
-					return parsed; // 如果獲取失敗，返回舊資料總比沒有好
-				}
-			}
+		if (!cached) {
+			logDebug('Cache miss for horoscope', { zodiacKey });
+			return null;
 		}
 
-		logDebug('Cache miss for horoscope', { zodiacKey });
-		return null;
+		const parsed = JSON.parse(cached) as CachedHoroscope;
+
+		// 檢查快取資料的日期是否為今日
+		const cachedDate = parsed.data.data.date;
+
+		if (DateValidator.isToday(cachedDate)) {
+			logDebug('Cache hit for horoscope (today)', { zodiacKey });
+			return parsed;
+		} else {
+			// 快取資料不是今日的，需要重新獲取
+			logDebug('Cache data is outdated, fetching fresh data', { zodiacKey, cachedDate });
+			return await refreshHoroscopeData(kv, zodiacKey);
+		}
 	} catch (error) {
 		logDebug('Error getting cached horoscope', { zodiacKey, error });
 		return null;
 	}
 }
 
+// 重新獲取星座資料
+async function refreshHoroscopeData(kv: KVNamespace, zodiacKey: string): Promise<CachedHoroscope | null> {
+	const zodiacEn = zodiacMap[zodiacKey];
+	const freshData = await fetchHoroscopeData(zodiacEn);
+
+	if (freshData && freshData.success) {
+		// 更新快取
+		await cacheHoroscope(kv, zodiacKey, freshData);
+		logDebug('Updated cache with fresh horoscope data', { zodiacKey });
+
+		return {
+			data: freshData,
+			cachedAt: new Date().toISOString(),
+		};
+	} else {
+		logDebug('Failed to fetch fresh horoscope data', { zodiacKey });
+		return null;
+	}
+}
+
 // 快取占星資料
 export async function cacheHoroscope(kv: KVNamespace, zodiacKey: string, data: HoroscopeData): Promise<void> {
-	const todayKey = DateUtils.getTodayKey();
-	const cacheKey = `${todayKey}_${zodiacKey}`;
+	const cacheKey = CacheKeyGenerator.getHoroscopeKey(zodiacKey);
 
 	const cachedData: CachedHoroscope = {
 		data,
@@ -145,8 +163,8 @@ export async function preloadAllHoroscopes(kv: KVNamespace): Promise<void> {
 			successCount: allData.successCount,
 		});
 
-		// 快取所有星座資料
-		for (const zodiacKey of allZodiacs) {
+		// 並行快取所有星座資料
+		const cachePromises = allZodiacs.map(async (zodiacKey) => {
 			const zodiacEn = zodiacMap[zodiacKey];
 			const horoscopeData = allData.horoscopes[zodiacEn];
 
@@ -156,42 +174,52 @@ export async function preloadAllHoroscopes(kv: KVNamespace): Promise<void> {
 			} else {
 				logDebug('No data available for zodiac', { zodiacKey, zodiacEn });
 			}
-		}
+		});
 
+		await Promise.all(cachePromises);
 		logDebug('Completed horoscope preload');
 	} catch (error) {
 		logDebug('Error in preload process', { error });
 	}
 }
 
-// 尋找星座匹配
-export function findZodiacMatch(text: string): string | undefined {
-	// 正規化文字（處理 Unicode 變體）
-	const normalizedText = text.normalize('NFKC');
+// 星座匹配器
+class ZodiacMatcher {
+	private static readonly ZODIAC_PATTERNS = Object.keys(zodiacMap);
 
-	// 檢查文字長度，只有2個字或3個字才進行匹配
-	if (normalizedText.length < 2 || normalizedText.length > 3) {
+	static findMatch(text: string): string | undefined {
+		// 正規化文字（處理 Unicode 變體）
+		const normalizedText = text.normalize('NFKC');
+
+		// 檢查文字長度，只有2個字或3個字才進行匹配
+		if (normalizedText.length < 2 || normalizedText.length > 3) {
+			return undefined;
+		}
+
+		// 嘗試各種匹配方法
+		const exactMatch = this.ZODIAC_PATTERNS.find((z) => normalizedText === z || normalizedText === z + '座');
+		if (exactMatch) {
+			return exactMatch;
+		}
+
+		const textWithoutSeat = normalizedText.endsWith('座') ? normalizedText.slice(0, -1) : normalizedText;
+		const matchWithoutSeat = this.ZODIAC_PATTERNS.find((z) => textWithoutSeat === z);
+		if (matchWithoutSeat) {
+			return matchWithoutSeat;
+		}
+
+		const fuzzyMatch = this.ZODIAC_PATTERNS.find((z) => normalizedText.includes(z));
+		if (fuzzyMatch) {
+			return fuzzyMatch;
+		}
+
 		return undefined;
 	}
+}
 
-	// 嘗試各種匹配方法
-	const exactMatch = Object.keys(zodiacMap).find((z) => normalizedText === z || normalizedText === z + '座');
-	if (exactMatch) {
-		return exactMatch;
-	}
-
-	const textWithoutSeat = normalizedText.endsWith('座') ? normalizedText.slice(0, -1) : normalizedText;
-	const matchWithoutSeat = Object.keys(zodiacMap).find((z) => textWithoutSeat === z);
-	if (matchWithoutSeat) {
-		return matchWithoutSeat;
-	}
-
-	const fuzzyMatch = Object.keys(zodiacMap).find((z) => normalizedText.includes(z));
-	if (fuzzyMatch) {
-		return fuzzyMatch;
-	}
-
-	return undefined;
+// 尋找星座匹配
+export function findZodiacMatch(text: string): string | undefined {
+	return ZodiacMatcher.findMatch(text);
 }
 
 // 格式化占星回覆

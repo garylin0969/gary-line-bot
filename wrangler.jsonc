@@ -8,7 +8,7 @@
 		"enabled": true
 	},
 	"vars": {
-		"LINE_CHANNEL_ACCESS_TOKEN": "177CrjqRypf9A1lTlm4rDw9vP+VIFzUljxLKTpjqfgqsfK1hq2tE0QrylSKpWpAIukYw1KZFS2GrIE9QkJYRb+yD7jxMVi9toRGn2R9YIpdEV3i9WrZ8hkh/9i7R15KwbLPSwR+Sc7cks2lcDeki0AdB04t89/1O/w1cDnyilFU="
+		"LINE_CHANNEL_ACCESS_TOKEN": ""
 	},
 	"kv_namespaces": [
 		{
