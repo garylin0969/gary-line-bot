@@ -9,19 +9,15 @@ export const CONFIG = {
 		COPYWRITING_EXPIRATION: 2 * 60 * 60, // 2小時後過期
 	},
 	API: {
-		RANDOM_GIRL_IMAGE_JSON: 'https://api.vvhan.com/api/avatar/girl?type=json',
-		RANDOM_GIRL_IMAGE: 'https://v2.api-m.com/api/meinvpic?return=302',
-		RANDOM_BLACK_SILK_IMAGE: 'https://v2.api-m.com/api/heisi?return=302',
-		RANDOM_WHITE_SILK_IMAGE: 'https://v2.api-m.com/api/baisi?return=302',
-		// RANDOM_PORN_IMAGE: 'https://image.anosu.top/pixiv?r18=1&size=small',
-		RANDOM_PORN_IMAGE: 'https://moe.jitsu.top/img?sort=r18&size=small',
-		RANDOM_GIRL_VIDEO: 'https://api.istero.com/resource/v1/douyin/video/rand?token=0c17bf1b49ca7333483ffcbebe201d4a',
-		HOROSCOPE: 'https://garylin0969.github.io/json-gather/data/horoscope.json',
-		LOVE_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/love-copywriting.json',
-		FUNNY_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/funny-copywriting.json',
-		ROMANTIC_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/romantic-copywriting.json',
-		DOG_TEXT: 'https://api.vvhan.com/api/text/dog?type=json',
-		LINE_REPLY: 'https://api.line.me/v2/bot/message/reply',
+		RANDOM_GIRL_IMAGE: 'https://v2.api-m.com/api/meinvpic?return=302', // 隨機美女圖
+		RANDOM_BLACK_SILK_IMAGE: 'https://v2.api-m.com/api/heisi?return=302', // 隨機黑絲圖
+		RANDOM_WHITE_SILK_IMAGE: 'https://v2.api-m.com/api/baisi?return=302', // 隨機白絲圖
+		RANDOM_PORN_IMAGE: 'https://moe.jitsu.top/img?sort=r18&size=small', // 隨機色圖
+		HOROSCOPE: 'https://garylin0969.github.io/json-gather/data/horoscope.json', // 星座運勢
+		LOVE_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/love-copywriting.json', // 愛情文案
+		FUNNY_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/funny-copywriting.json', // 搞笑文案
+		ROMANTIC_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/romantic-copywriting.json', // 浪漫文案
+		LINE_REPLY: 'https://api.line.me/v2/bot/message/reply', // LINE 回覆
 	},
 } as const;
 

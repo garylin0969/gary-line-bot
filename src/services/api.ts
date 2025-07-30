@@ -1,5 +1,5 @@
 import { CONFIG } from '../config/constants.js';
-import { TextResponse, RandomImageResponse, RandomVideoResponse, LineMessage } from '../types/index.js';
+import { TextResponse, LineMessage } from '../types/index.js';
 import { logDebug } from '../utils/common.js';
 
 // 取得文字內容
@@ -26,62 +26,6 @@ export async function fetchText(apiUrl: string): Promise<string | null> {
 		return null;
 	} catch (error) {
 		logDebug(`Error fetching text:`, error);
-		return null;
-	}
-}
-
-// 取得隨機圖片 URL
-export async function fetchRandomImage(): Promise<string | null> {
-	try {
-		logDebug(`Fetching random image from API: ${CONFIG.API.RANDOM_GIRL_IMAGE_JSON}`);
-		const response = await fetch(CONFIG.API.RANDOM_GIRL_IMAGE_JSON);
-		logDebug(`Random image API response status: ${response.status}`);
-
-		if (!response.ok) {
-			logDebug(`API request failed with status: ${response.status}`);
-			return null;
-		}
-
-		const imageData = (await response.json()) as RandomImageResponse;
-		logDebug(`Random image API response data:`, imageData);
-
-		if (imageData.success && imageData.url) {
-			logDebug(`Successfully fetched random image: ${imageData.url}`);
-			return imageData.url;
-		}
-
-		logDebug(`API request was not successful`);
-		return null;
-	} catch (error) {
-		logDebug(`Error fetching random image:`, error);
-		return null;
-	}
-}
-
-// 取得隨機影片 URL
-export async function fetchRandomVideo(): Promise<string | null> {
-	try {
-		logDebug(`Fetching random video from API: ${CONFIG.API.RANDOM_GIRL_VIDEO}`);
-		const response = await fetch(CONFIG.API.RANDOM_GIRL_VIDEO);
-		logDebug(`Random video API response status: ${response.status}`);
-
-		if (!response.ok) {
-			logDebug(`API request failed with status: ${response.status}`);
-			return null;
-		}
-
-		const videoData = (await response.json()) as RandomVideoResponse;
-		logDebug(`Random video API response data:`, videoData);
-
-		if (videoData.code === 200 && videoData.data?.video) {
-			logDebug(`Successfully fetched random video: ${videoData.data.video}`);
-			return videoData.data.video;
-		}
-
-		logDebug(`API request was not successful, code: ${videoData.code}`);
-		return null;
-	} catch (error) {
-		logDebug(`Error fetching random video:`, error);
 		return null;
 	}
 }

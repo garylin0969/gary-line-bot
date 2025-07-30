@@ -1,22 +1,33 @@
 // LINE 相關型別定義
 export interface LineEvent {
+	// 事件類型
 	type: string;
 	message?: {
 		type: string;
 		text: string;
 	};
+	// 回覆權杖
 	replyToken?: string;
+	// 來源
 	source?: {
+		// 來源類型
 		type: string;
+		// 群組 ID
 		groupId?: string;
+		// 使用者 ID
 		userId?: string;
 	};
 }
 
+// LINE 訊息型別定義
 export interface LineMessage {
+	// 訊息類型
 	type: string;
+	// 文字內容
 	text?: string;
+	// 原始內容 URL
 	originalContentUrl?: string;
+	// 預覽圖片 URL
 	previewImageUrl?: string;
 }
 
@@ -29,12 +40,6 @@ export interface Env {
 }
 
 // API 回應型別定義
-export interface RandomImageResponse {
-	success: boolean;
-	type: string;
-	url: string;
-}
-
 export interface TextResponse {
 	success: boolean;
 	type: string;
@@ -44,17 +49,7 @@ export interface TextResponse {
 	};
 }
 
-export interface RandomVideoResponse {
-	code: number;
-	data: {
-		video: string;
-	};
-	message: string;
-	elapsedTime: string;
-	providerName: string;
-}
-
-// 占星相關型別定義
+// 星座運勢資料
 export interface HoroscopeData {
 	constellation: string;
 	chineseName: string;
@@ -83,18 +78,29 @@ export interface HoroscopeData {
 	};
 }
 
+// 星座運勢 API 回應
 export interface HoroscopeResponse {
+	// 更新時間
 	updated: string;
+	// 更新時間
 	updateTime: string;
+	// 總星座數
 	totalConstellations: number;
+	// 成功次數
 	successCount: number;
+	// 失敗次數
 	failureCount: number;
+	// 處理時間
 	processingTimeMs: number;
+	// 是否轉換為繁體
 	convertedToTraditional: boolean;
+	// 錯誤訊息
 	errors: string[];
+	// 星座運勢資料
 	horoscopes: Record<string, HoroscopeData>;
 }
 
+// 星座運勢快取
 export interface CachedHoroscope {
 	data: HoroscopeData;
 	cachedAt: string;
@@ -108,6 +114,7 @@ export interface CopywritingItem {
 	addedAt: string;
 }
 
+// 文案 API 回應
 export interface CopywritingResponse {
 	type: string;
 	updated: string;
@@ -119,6 +126,7 @@ export interface CopywritingResponse {
 	copywritings: CopywritingItem[];
 }
 
+// 文案快取
 export interface CachedCopywriting {
 	data: CopywritingResponse;
 	cachedAt: string;
@@ -131,8 +139,11 @@ export interface GameState {
 	startedAt: number;
 }
 
+// 骰子遊戲 API 回應
 export interface RollResponse {
 	point: number;
+	// 是否完成
 	isComplete: boolean;
+	// 玩家得分
 	players: Record<string, number>;
 }

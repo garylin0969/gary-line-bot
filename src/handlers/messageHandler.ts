@@ -2,7 +2,7 @@ import * as OpenCC from 'opencc-js';
 import { LineEvent, Env } from '../types/index.js';
 import { KEY_WORDS_REPLY, CONFIG } from '../config/constants.js';
 import { logDebug } from '../utils/common.js';
-import { sendReply, sendImageReply, sendVideoReply, fetchText, fetchRandomVideo } from '../services/api.js';
+import { sendReply, sendImageReply } from '../services/api.js';
 import {
 	findZodiacMatch,
 	getCachedHoroscope,
@@ -68,12 +68,11 @@ function isCommand(text: string): boolean {
 	const isBlackSilk = normalizedText === '!黑絲';
 	const isWhiteSilk = normalizedText === '!白絲';
 	const isRomanticCopywriting = normalizedText === '!騷話' || normalizedText === '!骚话';
-	const isDog = normalizedText === '!舔狗';
 	const isLoveCopywriting = normalizedText === '!情話';
 	const isFunnyCopywriting = normalizedText === '!幹話';
 	const isNSFW = text === '色色';
 	const isKeyWords = Boolean(Object?.keys(KEY_WORDS_REPLY)?.find((key) => normalizedText?.includes(key)));
-	const isLittleSister = normalizedText === '!小姊姊' || normalizedText === '!小姐姐';
+
 	const isGay =
 		normalizedText === '!gay' ||
 		normalizedText === '!Gay' ||
@@ -88,14 +87,12 @@ function isCommand(text: string): boolean {
 		isRollNum ||
 		isDraw ||
 		isRomanticCopywriting ||
-		isDog ||
 		isNSFW ||
 		isKeyWords ||
 		isBlackSilk ||
 		isWhiteSilk ||
 		isLoveCopywriting ||
 		isFunnyCopywriting ||
-		isLittleSister ||
 		isGay;
 
 	logDebug('Command detection', {
@@ -107,12 +104,10 @@ function isCommand(text: string): boolean {
 		isBlackSilk,
 		isWhiteSilk,
 		isRomanticCopywriting,
-		isDog,
 		isLoveCopywriting,
 		isFunnyCopywriting,
 		isNSFW,
 		isKeyWords,
-		isLittleSister,
 		isGay,
 		result,
 	});
@@ -155,13 +150,6 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 		return;
 	}
 
-	// 處理「舔狗」命令
-	if (normalizedText === '!舔狗') {
-		logDebug('Detected dog text command');
-		await handleDogText(event.replyToken!, env);
-		return;
-	}
-
 	// 處理「色色」命令
 	if (text === '色色') {
 		logDebug('Detected NSFW command');
@@ -200,13 +188,6 @@ async function handleCommand(event: LineEvent, env: Env, ctx: ExecutionContext):
 		if (copywritingText) {
 			await sendReply(event.replyToken!, copywritingText, env.LINE_CHANNEL_ACCESS_TOKEN);
 		}
-		return;
-	}
-
-	// 處理「小姊姊」命令
-	if (normalizedText === '!小姊姊' || normalizedText === '!小姐姐') {
-		logDebug('Detected little sister video command');
-		await handleLittleSisterVideo(event.replyToken!, env);
 		return;
 	}
 
@@ -321,34 +302,6 @@ async function handleHoroscope(zodiacKey: string, replyToken: string, userId: st
 
 	const replyText = await formatHoroscopeReply(data, zodiacKey);
 	await sendReply(replyToken, replyText, env.LINE_CHANNEL_ACCESS_TOKEN);
-}
-
-// 處理舔狗文字
-async function handleDogText(replyToken: string, env: Env): Promise<void> {
-	logDebug('Handling dog text request');
-	const text = await fetchText(CONFIG.API.DOG_TEXT);
-	if (text) {
-		const converter = await getConverter();
-		const traditionalText = await converter(text);
-		await sendReply(replyToken, traditionalText, env.LINE_CHANNEL_ACCESS_TOKEN);
-	}
-}
-
-// 處理小姊姊影片
-async function handleLittleSisterVideo(replyToken: string, env: Env): Promise<void> {
-	try {
-		const videoUrl = await fetchRandomVideo();
-		if (videoUrl) {
-			await sendVideoReply(replyToken, videoUrl, env.LINE_CHANNEL_ACCESS_TOKEN);
-			logDebug('Video sent successfully');
-		} else {
-			logDebug('Failed to fetch video URL');
-			await sendReply(replyToken, '影片取得失敗，請稍後再試', env.LINE_CHANNEL_ACCESS_TOKEN);
-		}
-	} catch (error) {
-		logDebug('Error handling little sister video', { error });
-		await sendReply(replyToken, '影片發送失敗，請稍後再試', env.LINE_CHANNEL_ACCESS_TOKEN);
-	}
 }
 
 // 處理甲圖
