@@ -14,6 +14,57 @@ async function getConverter(): Promise<(text: string) => Promise<string>> {
 	return converter;
 }
 
+// 簡體轉繁體轉換器
+class TraditionalConverter {
+	// 轉換單一文字
+	static async convertText(text: string): Promise<string> {
+		try {
+			const converter = await getConverter();
+			return await converter(text);
+		} catch (error) {
+			logDebug('Error converting text to traditional', { error, text });
+			return text; // 轉換失敗時返回原文
+		}
+	}
+
+	// 轉換星座運勢資料
+	static async convertHoroscopeData(data: HoroscopeData): Promise<HoroscopeData> {
+		try {
+			const converter = await getConverter();
+
+			// 轉換所有文字欄位
+			const convertedData = {
+				...data,
+				data: {
+					...data.data,
+					ji: await converter(data.data.ji),
+					yi: await converter(data.data.yi),
+					all: await converter(data.data.all),
+					love: await converter(data.data.love),
+					work: await converter(data.data.work),
+					money: await converter(data.data.money),
+					health: await converter(data.data.health),
+					notice: await converter(data.data.notice),
+					discuss: await converter(data.data.discuss),
+					all_text: await converter(data.data.all_text),
+					love_text: await converter(data.data.love_text),
+					work_text: await converter(data.data.work_text),
+					money_text: await converter(data.data.money_text),
+					health_text: await converter(data.data.health_text),
+					lucky_color: await converter(data.data.lucky_color),
+					lucky_star: await converter(data.data.lucky_star),
+				},
+			};
+
+			logDebug('Successfully converted horoscope data to traditional', { constellation: data.constellation });
+			return convertedData;
+		} catch (error) {
+			logDebug('Error converting horoscope data to traditional', { error, constellation: data.constellation });
+			return data; // 轉換失敗時返回原始資料
+		}
+	}
+}
+
 // 快取鍵生成器
 class CacheKeyGenerator {
 	static getHoroscopeKey(zodiacKey: string): string {
@@ -74,7 +125,9 @@ export async function fetchHoroscopeData(zodiacEn: string): Promise<HoroscopeDat
 		return null;
 	}
 
-	return allData.horoscopes[zodiacEn];
+	// 轉換為繁體中文
+	const convertedData = await TraditionalConverter.convertHoroscopeData(allData.horoscopes[zodiacEn]);
+	return convertedData;
 }
 
 // 取得快取的占星資料
@@ -113,7 +166,7 @@ async function refreshHoroscopeData(kv: KVNamespace, zodiacKey: string): Promise
 	const freshData = await fetchHoroscopeData(zodiacEn);
 
 	if (freshData && freshData.success) {
-		// 更新快取
+		// 更新快取（資料已經在 fetchHoroscopeData 中轉換為繁體）
 		await cacheHoroscope(kv, zodiacKey, freshData);
 		logDebug('Updated cache with fresh horoscope data', { zodiacKey });
 
@@ -169,7 +222,9 @@ export async function preloadAllHoroscopes(kv: KVNamespace): Promise<void> {
 			const horoscopeData = allData.horoscopes[zodiacEn];
 
 			if (horoscopeData && horoscopeData.success) {
-				await cacheHoroscope(kv, zodiacKey, horoscopeData);
+				// 轉換為繁體中文後再快取
+				const convertedData = await TraditionalConverter.convertHoroscopeData(horoscopeData);
+				await cacheHoroscope(kv, zodiacKey, convertedData);
 				logDebug('Cached horoscope data', { zodiacKey, zodiacEn });
 			} else {
 				logDebug('No data available for zodiac', { zodiacKey, zodiacEn });

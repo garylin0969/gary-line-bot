@@ -1,6 +1,61 @@
+import * as OpenCC from 'opencc-js';
 import { CONFIG } from '../config/constants.js';
 import { CopywritingResponse, CachedCopywriting } from '../types/index.js';
 import { logDebug } from '../utils/common.js';
+
+// OpenCC 轉換器
+let converter: Promise<(text: string) => Promise<string>> | null = null;
+
+async function getConverter(): Promise<(text: string) => Promise<string>> {
+	if (!converter) {
+		converter = OpenCC.Converter({ from: 'cn', to: 'tw' });
+	}
+	return converter;
+}
+
+// 簡體轉繁體轉換器
+class TraditionalConverter {
+	// 轉換單一文字
+	static async convertText(text: string): Promise<string> {
+		try {
+			const converter = await getConverter();
+			return await converter(text);
+		} catch (error) {
+			logDebug('Error converting text to traditional', { error, text });
+			return text; // 轉換失敗時返回原文
+		}
+	}
+
+	// 轉換文案資料
+	static async convertCopywritingData(data: CopywritingResponse): Promise<CopywritingResponse> {
+		try {
+			const converter = await getConverter();
+
+			// 轉換所有文案內容
+			const convertedCopywritings = await Promise.all(
+				data.copywritings.map(async (item) => ({
+					...item,
+					content: await converter(item.content),
+				}))
+			);
+
+			const convertedData = {
+				...data,
+				copywritings: convertedCopywritings,
+				convertedToTraditional: true,
+			};
+
+			logDebug('Successfully converted copywriting data to traditional', {
+				type: data.type,
+				totalCount: data.totalCount,
+			});
+			return convertedData;
+		} catch (error) {
+			logDebug('Error converting copywriting data to traditional', { error, type: data.type });
+			return data; // 轉換失敗時返回原始資料
+		}
+	}
+}
 
 // 文案快取管理器
 class CopywritingCacheManager {

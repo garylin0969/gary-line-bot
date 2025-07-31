@@ -1,4 +1,3 @@
-import * as OpenCC from 'opencc-js';
 import { LineEvent, Env } from '../types/index.js';
 import { KEY_WORDS_REPLY, CONFIG } from '../config/constants.js';
 import { logDebug } from '../utils/common.js';
@@ -15,16 +14,6 @@ import {
 import { getRandomCopywritingText } from '../services/copywriting.js';
 import { handleRollCommand } from '../services/game.js';
 import { zodiacMap } from '../config/constants.js';
-
-// OpenCC 轉換器
-let converter: Promise<(text: string) => Promise<string>> | null = null;
-
-async function getConverter(): Promise<(text: string) => Promise<string>> {
-	if (!converter) {
-		converter = OpenCC.Converter({ from: 'cn', to: 'tw' });
-	}
-	return converter;
-}
 
 // 命令類型枚舉
 enum CommandType {
