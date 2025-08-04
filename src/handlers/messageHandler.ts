@@ -153,11 +153,7 @@ async function handleCommand(event: LineEvent, command: CommandDetection, env: E
 				break;
 
 			case CommandType.WHITE_SILK:
-				await sendImageReply(
-					event.replyToken!,
-					CONFIG.API.RANDOM_WHITE_SILK_IMAGE + '?rand=' + Math.random(),
-					env.LINE_CHANNEL_ACCESS_TOKEN
-				);
+				await sendImageReply(event.replyToken!, CONFIG.API.RANDOM_WHITE_SILK_IMAGE, env.LINE_CHANNEL_ACCESS_TOKEN);
 				break;
 
 			case CommandType.NSFW:
