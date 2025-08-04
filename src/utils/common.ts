@@ -40,7 +40,8 @@ class TextUtils {
 class LogUtils {
 	// 調試日誌函數
 	static debug(message: string, data?: any): void {
-		console.log(`[DEBUG] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+		// console.log(`[DEBUG] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+		return;
 	}
 }
 

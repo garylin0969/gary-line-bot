@@ -48,6 +48,11 @@ export async function handleMessage(event: LineEvent, env: Env, ctx: ExecutionCo
 		}
 
 		const text = event.message.text.trim();
+		const userId = event.source?.userId;
+
+		console.log(`userId: ${userId}`);
+		console.log(`text: ${text}`);
+
 		logDebug('Processing message', { text });
 
 		// 檢查是否為命令
