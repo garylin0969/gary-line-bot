@@ -174,7 +174,7 @@ const handleCommand = async (event: LineEvent, command: CommandDetection, env: E
 				break;
 
 			case CommandType.CAT:
-				await sendImageReply(event.replyToken!, CONFIG.API.CAT_RANDOM_IMAGE + '&random=' + Math.random(), env.LINE_CHANNEL_ACCESS_TOKEN);
+				await sendImageReply(event.replyToken!, CONFIG.API.CAT_RANDOM_IMAGE + '?random=' + Math.random(), env.LINE_CHANNEL_ACCESS_TOKEN);
 				break;
 
 			case CommandType.KEYWORDS:
