@@ -1,32 +1,21 @@
 import * as OpenCC from 'opencc-js';
 import { CONFIG, zodiacMap } from '../config/constants.js';
 import { HoroscopeData, HoroscopeResponse, CachedHoroscope } from '../types/index.js';
-import { logDebug, truncateToFirstPeriod } from '../utils/common.js';
+import { truncateToFirstPeriod } from '../utils/common.js';
 import { DateUtils } from '../utils/date.js';
 
 // OpenCC 轉換器
 let converter: Promise<(text: string) => Promise<string>> | null = null;
 
-async function getConverter(): Promise<(text: string) => Promise<string>> {
+const getConverter = async (): Promise<(text: string) => Promise<string>> => {
 	if (!converter) {
 		converter = OpenCC.Converter({ from: 'cn', to: 'tw' });
 	}
 	return converter;
-}
-
-// 轉換單一文字
-async function convertText(text: string): Promise<string> {
-	try {
-		const converter = await getConverter();
-		return await converter(text);
-	} catch (error) {
-		logDebug('Error converting text to traditional', { error, text });
-		return text; // 轉換失敗時返回原文
-	}
-}
+};
 
 // 轉換星座運勢資料
-async function convertHoroscopeData(data: HoroscopeData): Promise<HoroscopeData> {
+const convertHoroscopeData = async (data: HoroscopeData): Promise<HoroscopeData> => {
 	try {
 		const converter = await getConverter();
 
@@ -54,83 +43,64 @@ async function convertHoroscopeData(data: HoroscopeData): Promise<HoroscopeData>
 			},
 		};
 
-		logDebug('Successfully converted horoscope data to traditional', { constellation: data.constellation });
 		return convertedData;
 	} catch (error) {
-		logDebug('Error converting horoscope data to traditional', { error, constellation: data.constellation });
 		return data; // 轉換失敗時返回原始資料
 	}
-}
+};
 
 // 取得星座快取鍵
-function getHoroscopeKey(zodiacKey: string): string {
+const getHoroscopeKey = (zodiacKey: string): string => {
 	const todayKey = DateUtils.getTodayKey();
 	return `${todayKey}_${zodiacKey}`;
-}
+};
 
 // 檢查是否為今日
-function isToday(dateString: string): boolean {
+const isToday = (dateString: string): boolean => {
 	const cachedDate = dateString; // YYYY-MM-DD 格式
 	const today = DateUtils.getTodayDate(); // MM/DD 格式
 
 	// 將 API 日期格式 (YYYY-MM-DD) 轉換為 MM/DD 格式進行比較
 	const cachedDateFormatted = cachedDate.substring(5).replace('-', '/'); // "2025-07-23" -> "07/23"
 
-	logDebug('Checking cached horoscope date', {
-		cachedDate,
-		cachedDateFormatted,
-		today,
-		isToday: cachedDateFormatted === today,
-	});
-
 	return cachedDateFormatted === today;
-}
+};
 
 // 取得所有占星資料
-export async function fetchAllHoroscopesData(): Promise<HoroscopeResponse | null> {
+export const fetchAllHoroscopesData = async (): Promise<HoroscopeResponse | null> => {
 	try {
-		logDebug('Fetching all horoscope data', { apiUrl: CONFIG.API.HOROSCOPE });
 		const response = await fetch(CONFIG.API.HOROSCOPE);
-		logDebug('Horoscope API response status', { status: response.status });
 
 		if (!response.ok) {
-			logDebug('Failed to fetch horoscope data', { status: response.status });
 			return null;
 		}
 
 		const horoscopeData = (await response.json()) as HoroscopeResponse;
-		logDebug('Successfully fetched all horoscope data', {
-			successCount: horoscopeData.successCount,
-			totalConstellations: horoscopeData.totalConstellations,
-		});
 		return horoscopeData;
 	} catch (error) {
-		logDebug('Error fetching all horoscope data', { error });
 		return null;
 	}
-}
+};
 
 // 取得特定星座占星資料
-export async function fetchHoroscopeData(zodiacEn: string): Promise<HoroscopeData | null> {
+export const fetchHoroscopeData = async (zodiacEn: string): Promise<HoroscopeData | null> => {
 	const allData = await fetchAllHoroscopesData();
 	if (!allData || !allData.horoscopes[zodiacEn]) {
-		logDebug('Failed to get horoscope data for zodiac', { zodiacEn });
 		return null;
 	}
 
 	// 轉換為繁體中文
 	const convertedData = await convertHoroscopeData(allData.horoscopes[zodiacEn]);
 	return convertedData;
-}
+};
 
 // 取得快取的占星資料
-export async function getCachedHoroscope(kv: KVNamespace, zodiacKey: string): Promise<CachedHoroscope | null> {
+export const getCachedHoroscope = async (kv: KVNamespace, zodiacKey: string): Promise<CachedHoroscope | null> => {
 	const cacheKey = getHoroscopeKey(zodiacKey);
 
 	try {
 		const cached = await kv.get(cacheKey);
 		if (!cached) {
-			logDebug('Cache miss for horoscope', { zodiacKey });
 			return null;
 		}
 
@@ -140,41 +110,36 @@ export async function getCachedHoroscope(kv: KVNamespace, zodiacKey: string): Pr
 		const cachedDate = parsed.data.data.date;
 
 		if (isToday(cachedDate)) {
-			logDebug('Cache hit for horoscope (today)', { zodiacKey });
 			return parsed;
 		} else {
 			// 快取資料不是今日的，需要重新獲取
-			logDebug('Cache data is outdated, fetching fresh data', { zodiacKey, cachedDate });
 			return await refreshHoroscopeData(kv, zodiacKey);
 		}
 	} catch (error) {
-		logDebug('Error getting cached horoscope', { zodiacKey, error });
 		return null;
 	}
-}
+};
 
 // 重新獲取星座資料
-async function refreshHoroscopeData(kv: KVNamespace, zodiacKey: string): Promise<CachedHoroscope | null> {
+const refreshHoroscopeData = async (kv: KVNamespace, zodiacKey: string): Promise<CachedHoroscope | null> => {
 	const zodiacEn = zodiacMap[zodiacKey];
 	const freshData = await fetchHoroscopeData(zodiacEn);
 
 	if (freshData && freshData.success) {
 		// 更新快取（資料已經在 fetchHoroscopeData 中轉換為繁體）
 		await cacheHoroscope(kv, zodiacKey, freshData);
-		logDebug('Updated cache with fresh horoscope data', { zodiacKey });
 
 		return {
 			data: freshData,
 			cachedAt: new Date().toISOString(),
 		};
 	} else {
-		logDebug('Failed to fetch fresh horoscope data', { zodiacKey });
 		return null;
 	}
-}
+};
 
 // 快取占星資料
-export async function cacheHoroscope(kv: KVNamespace, zodiacKey: string, data: HoroscopeData): Promise<void> {
+export const cacheHoroscope = async (kv: KVNamespace, zodiacKey: string, data: HoroscopeData): Promise<void> => {
 	const cacheKey = getHoroscopeKey(zodiacKey);
 
 	const cachedData: CachedHoroscope = {
@@ -186,28 +151,20 @@ export async function cacheHoroscope(kv: KVNamespace, zodiacKey: string, data: H
 		await kv.put(cacheKey, JSON.stringify(cachedData), {
 			expirationTtl: CONFIG.CACHE.EXPIRATION,
 		});
-		logDebug('Cached horoscope data', { zodiacKey });
 	} catch (error) {
-		logDebug('Error caching horoscope data', { zodiacKey, error });
+		// 快取失敗時靜默處理
 	}
-}
+};
 
 // 預載所有占星資料
-export async function preloadAllHoroscopes(kv: KVNamespace): Promise<void> {
-	logDebug('Starting horoscope preload');
-
+export const preloadAllHoroscopes = async (kv: KVNamespace): Promise<void> => {
 	try {
 		const allData = await fetchAllHoroscopesData();
 		if (!allData) {
-			logDebug('Failed to fetch all horoscope data');
 			return;
 		}
 
 		const allZodiacs = Object.keys(zodiacMap);
-		logDebug('Caching all horoscope data', {
-			totalConstellations: allData.totalConstellations,
-			successCount: allData.successCount,
-		});
 
 		// 並行快取所有星座資料
 		const cachePromises = allZodiacs.map(async (zodiacKey) => {
@@ -218,21 +175,17 @@ export async function preloadAllHoroscopes(kv: KVNamespace): Promise<void> {
 				// 轉換為繁體中文後再快取
 				const convertedData = await convertHoroscopeData(horoscopeData);
 				await cacheHoroscope(kv, zodiacKey, convertedData);
-				logDebug('Cached horoscope data', { zodiacKey, zodiacEn });
-			} else {
-				logDebug('No data available for zodiac', { zodiacKey, zodiacEn });
 			}
 		});
 
 		await Promise.all(cachePromises);
-		logDebug('Completed horoscope preload');
 	} catch (error) {
-		logDebug('Error in preload process', { error });
+		// 預載失敗時靜默處理
 	}
-}
+};
 
 // 尋找星座匹配
-export function findZodiacMatch(text: string): string | undefined {
+export const findZodiacMatch = (text: string): string | undefined => {
 	// 正規化文字（處理 Unicode 變體）
 	const normalizedText = text.normalize('NFKC');
 
@@ -261,10 +214,10 @@ export function findZodiacMatch(text: string): string | undefined {
 	}
 
 	return undefined;
-}
+};
 
 // 格式化占星回覆
-export async function formatHoroscopeReply(data: HoroscopeData, zodiacKey: string): Promise<string> {
+export const formatHoroscopeReply = async (data: HoroscopeData, zodiacKey: string): Promise<string> => {
 	const displayDate = DateUtils.getTodayDate();
 
 	return `今日運勢 ( ${displayDate} ) ${zodiacKey}座
@@ -282,10 +235,10 @@ ${truncateToFirstPeriod(data.data.health_text)}
 🍀 幸運數字：${data.data.lucky_number}
 🎨 幸運顏色：${data.data.lucky_color}
 🌟 幸運星座：${data.data.lucky_star}`;
-}
+};
 
 // 取得自訂占星訊息（許雲藏專用）
-export async function getCustomHoroscopeForUser(zodiacKey: string): Promise<string> {
+export const getCustomHoroscopeForUser = async (zodiacKey: string): Promise<string> => {
 	const todayDate = DateUtils.getTodayDate();
 	return `今日運勢 ( ${todayDate} ) ${zodiacKey}座
 
@@ -303,4 +256,4 @@ export async function getCustomHoroscopeForUser(zodiacKey: string): Promise<stri
 🍀 幸運數字：69
 🎨 幸運顏色：精液白
 🌟 幸運星座：可憐沒有`;
-}
+};

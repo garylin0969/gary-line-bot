@@ -1,6 +1,5 @@
 import { LineEvent, Env } from '../types/index.js';
 import { KEY_WORDS_REPLY, CONFIG } from '../config/constants.js';
-import { logDebug } from '../utils/common.js';
 import { sendReply, sendImageReply } from '../services/api.js';
 import {
 	findZodiacMatch,
@@ -38,12 +37,9 @@ interface CommandDetection {
 }
 
 // 主要訊息處理函數
-export async function handleMessage(event: LineEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+export const handleMessage = async (event: LineEvent, env: Env, ctx: ExecutionContext): Promise<void> => {
 	try {
-		logDebug('Starting message processing', { event });
-
 		if (event.type !== 'message' || event.message?.type !== 'text' || !event.replyToken) {
-			logDebug('Invalid message type or missing replyToken', { type: event.type, messageType: event.message?.type });
 			return;
 		}
 
@@ -53,26 +49,22 @@ export async function handleMessage(event: LineEvent, env: Env, ctx: ExecutionCo
 		console.log(`userId: ${userId}`);
 		console.log(`text: ${text}`);
 
-		logDebug('Processing message', { text });
-
 		// 檢查是否為命令
 		const command = detectCommand(text);
 		if (command) {
-			logDebug('Handling command', { command });
 			await handleCommand(event, command, env, ctx);
 			return;
 		}
 
-		logDebug('Processing as normal message', { text });
 		// 處理一般文本
 		await handleNormalMessage(text, event.replyToken, event.source?.userId || '', env, ctx);
 	} catch (error) {
-		logDebug('Error in handleMessage', { error });
+		// 錯誤處理
 	}
-}
+};
 
 // 檢測命令類型
-function detectCommand(text: string): CommandDetection | null {
+const detectCommand = (text: string): CommandDetection | null => {
 	const normalizedText = text?.replace(/[！]/g, '!')?.toLowerCase();
 
 	// 遊戲命令
@@ -119,23 +111,22 @@ function detectCommand(text: string): CommandDetection | null {
 	}
 
 	return null;
-}
+};
 
 // 檢查是否為甲相關命令
-function isGayCommand(normalizedText: string): boolean {
+const isGayCommand = (normalizedText: string): boolean => {
 	const gayCommands = ['!gay', '!Gay', 'gay', 'Gay', '!甲', '甲', '!甲圖', '甲圖'];
 	return gayCommands.includes(normalizedText);
-}
+};
 
 // 檢查關鍵字匹配
-function hasKeywordMatch(text: string): boolean {
+const hasKeywordMatch = (text: string): boolean => {
 	return Object.keys(KEY_WORDS_REPLY).some((key) => text.includes(key));
-}
+};
 
 // 處理命令
-async function handleCommand(event: LineEvent, command: CommandDetection, env: Env, ctx: ExecutionContext): Promise<void> {
+const handleCommand = async (event: LineEvent, command: CommandDetection, env: Env, ctx: ExecutionContext): Promise<void> => {
 	const { type, text, normalizedText } = command;
-	logDebug('Starting command handling', { type, text, normalizedText });
 
 	try {
 		switch (type) {
@@ -181,82 +172,60 @@ async function handleCommand(event: LineEvent, command: CommandDetection, env: E
 				break;
 
 			default:
-				logDebug('Unknown command type', { type });
+				break;
 		}
 	} catch (error) {
-		logDebug('Error handling command', { type, error });
 		await sendReply(event.replyToken!, '處理命令時發生錯誤', env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
-}
+};
 
 // 處理文案命令
-async function handleCopywritingCommand(replyToken: string, apiUrl: string, cacheKey: string, env: Env): Promise<void> {
+const handleCopywritingCommand = async (replyToken: string, apiUrl: string, cacheKey: string, env: Env): Promise<void> => {
 	const copywritingText = await getRandomCopywritingText(apiUrl, cacheKey, env.COPYWRITING_CACHE);
 	if (copywritingText) {
 		await sendReply(replyToken, copywritingText, env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
-}
+};
 
 // 處理關鍵字命令
-async function handleKeywordsCommand(replyToken: string, text: string, env: Env): Promise<void> {
+const handleKeywordsCommand = async (replyToken: string, text: string, env: Env): Promise<void> => {
 	const matchedKey = Object.keys(KEY_WORDS_REPLY).find((key) => text.includes(key));
 	if (matchedKey) {
 		await sendReply(replyToken, KEY_WORDS_REPLY[matchedKey as keyof typeof KEY_WORDS_REPLY], env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
-}
+};
 
 // 處理遊戲命令
-async function handleGameCommand(event: LineEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-	logDebug('Starting game command handling', {
-		event,
-		groupId: event.source?.groupId,
-		userId: event.source?.userId,
-		messageText: event.message?.text,
-	});
-
+const handleGameCommand = async (event: LineEvent, env: Env, ctx: ExecutionContext): Promise<void> => {
 	if (!event.source?.groupId || !event.source?.userId) {
-		logDebug('Command requires group context and user ID', {
-			groupId: event.source?.groupId,
-			userId: event.source?.userId,
-			source: event.source,
-		});
 		await sendReply(event.replyToken!, '此命令只能在群組中使用', env.LINE_CHANNEL_ACCESS_TOKEN);
 		return;
 	}
 
 	try {
 		const text = event.message!.text.trim();
-		logDebug('Processing game command', {
-			command: text,
-			groupId: event.source.groupId,
-			userId: event.source.userId,
-			source: event.source,
-		});
 
 		await handleRollCommand(event.source.groupId, event.source.userId, event.replyToken!, text, env.LINE_CHANNEL_ACCESS_TOKEN, env);
-		logDebug('Game command processed successfully');
 	} catch (error) {
-		logDebug('Error processing game command', { error });
 		await sendReply(event.replyToken!, '處理命令時發生錯誤', env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
-}
+};
 
 // 處理一般訊息
-async function handleNormalMessage(text: string, replyToken: string, userId: string, env: Env, ctx: ExecutionContext): Promise<void> {
+const handleNormalMessage = async (text: string, replyToken: string, userId: string, env: Env, ctx: ExecutionContext): Promise<void> => {
 	try {
 		// 檢查星座匹配
 		const match = findZodiacMatch(text);
 		if (match) {
-			logDebug('Found zodiac match', { match, userId });
 			await handleHoroscope(match, replyToken, userId, env, ctx);
 		}
 	} catch (error) {
-		logDebug('Error handling normal message', { error });
+		// 錯誤處理
 	}
-}
+};
 
 // 處理占星
-async function handleHoroscope(zodiacKey: string, replyToken: string, userId: string, env: Env, ctx: ExecutionContext): Promise<void> {
+const handleHoroscope = async (zodiacKey: string, replyToken: string, userId: string, env: Env, ctx: ExecutionContext): Promise<void> => {
 	// 檢查是否為許雲藏的訊息
 	if (userId === 'U10e6659922346d74db502c05e908bc55') {
 		const customMessage = await getCustomHoroscopeForUser(zodiacKey);
@@ -268,11 +237,9 @@ async function handleHoroscope(zodiacKey: string, replyToken: string, userId: st
 	const cachedData = await getCachedHoroscope(env.HOROSCOPE_CACHE, zodiacKey);
 
 	if (cachedData) {
-		logDebug('Using cached horoscope data', { zodiacKey });
 		data = cachedData.data;
 	} else {
 		// 快取未命中時，直接獲取單個星座的資料
-		logDebug('Cache miss, fetching individual horoscope', { zodiacKey });
 		const zodiacEn = zodiacMap[zodiacKey];
 		data = await fetchHoroscopeData(zodiacEn);
 
@@ -284,16 +251,15 @@ async function handleHoroscope(zodiacKey: string, replyToken: string, userId: st
 	}
 
 	if (!data) {
-		logDebug('No horoscope data available', { zodiacKey });
 		return;
 	}
 
 	const replyText = await formatHoroscopeReply(data, zodiacKey);
 	await sendReply(replyToken, replyText, env.LINE_CHANNEL_ACCESS_TOKEN);
-}
+};
 
 // 處理甲圖
-async function handleGay(replyToken: string, env: Env): Promise<void> {
+const handleGay = async (replyToken: string, env: Env): Promise<void> => {
 	try {
 		// 隨機選擇 1-20 之間的數字
 		const randomNumber = Math.floor(Math.random() * 20) + 1;
@@ -301,11 +267,8 @@ async function handleGay(replyToken: string, env: Env): Promise<void> {
 		// 構建圖片 URL
 		const imageUrl = `https://garylin0969.github.io/json-gather/data/images/gay/gay${randomNumber}.jpg`;
 
-		logDebug('Sending gay image', { randomNumber, imageUrl });
 		await sendImageReply(replyToken, imageUrl, env.LINE_CHANNEL_ACCESS_TOKEN);
-		logDebug('Gay image sent successfully');
 	} catch (error) {
-		logDebug('Error handling gay image', { error });
 		await sendReply(replyToken, '圖片發送失敗，請稍後再試', env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
-}
+};

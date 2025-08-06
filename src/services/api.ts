@@ -1,9 +1,8 @@
 import { CONFIG } from '../config/constants.js';
 import { TextResponse, LineMessage } from '../types/index.js';
-import { logDebug } from '../utils/common.js';
 
 // 發送 LINE 訊息
-async function sendMessages(replyToken: string, messages: LineMessage[], accessToken: string): Promise<void> {
+export const sendLineMessages = async (replyToken: string, messages: LineMessage[], accessToken: string): Promise<void> => {
 	try {
 		const response = await fetch(CONFIG.API.LINE_REPLY, {
 			method: 'POST',
@@ -15,26 +14,21 @@ async function sendMessages(replyToken: string, messages: LineMessage[], accessT
 		});
 
 		if (!response.ok) {
-			logDebug('Failed to send LINE messages', {
-				status: response.status,
-				statusText: response.statusText,
-			});
-		} else {
-			logDebug('Successfully sent LINE messages', { messageCount: messages.length });
+			// 發送失敗時靜默處理
 		}
 	} catch (error) {
-		logDebug('Error sending LINE messages', { error });
+		// 發送錯誤時靜默處理
 	}
-}
+};
 
 // 發送文字回覆
-async function sendText(replyToken: string, text: string, accessToken: string): Promise<void> {
-	await sendMessages(replyToken, [{ type: 'text', text }], accessToken);
-}
+export const sendReply = async (replyToken: string, text: string, accessToken: string): Promise<void> => {
+	await sendLineMessages(replyToken, [{ type: 'text', text }], accessToken);
+};
 
 // 發送圖片回覆
-async function sendImage(replyToken: string, imageUrl: string, accessToken: string): Promise<void> {
-	await sendMessages(
+export const sendImageReply = async (replyToken: string, imageUrl: string, accessToken: string): Promise<void> => {
+	await sendLineMessages(
 		replyToken,
 		[
 			{
@@ -45,11 +39,11 @@ async function sendImage(replyToken: string, imageUrl: string, accessToken: stri
 		],
 		accessToken
 	);
-}
+};
 
 // 發送影片回覆
-async function sendVideo(replyToken: string, videoUrl: string, accessToken: string): Promise<void> {
-	await sendMessages(
+export const sendVideoReply = async (replyToken: string, videoUrl: string, accessToken: string): Promise<void> => {
+	await sendLineMessages(
 		replyToken,
 		[
 			{
@@ -60,10 +54,10 @@ async function sendVideo(replyToken: string, videoUrl: string, accessToken: stri
 		],
 		accessToken
 	);
-}
+};
 
 // 取得群組成員資料
-async function getGroupMemberProfile(userId: string, groupId: string, accessToken: string): Promise<string> {
+export const fetchGroupMemberProfile = async (userId: string, groupId: string, accessToken: string): Promise<string> => {
 	try {
 		const response = await fetch(`https://api.line.me/v2/bot/group/${groupId}/member/${userId}`, {
 			headers: {
@@ -72,62 +66,33 @@ async function getGroupMemberProfile(userId: string, groupId: string, accessToke
 		});
 
 		if (!response.ok) {
-			logDebug('Failed to fetch group member profile', {
-				userId,
-				groupId,
-				status: response.status,
-			});
 			return userId;
 		}
 
 		const profile = (await response.json()) as { displayName: string };
-		logDebug('Successfully fetched group member profile', {
-			userId,
-			displayName: profile.displayName,
-		});
 		return profile.displayName;
 	} catch (error) {
-		logDebug('Error fetching group member profile', {
-			userId,
-			groupId,
-			error,
-		});
 		return userId;
 	}
-}
+};
 
 // 取得文字內容
-async function fetchText(apiUrl: string): Promise<string | null> {
+export const fetchText = async (apiUrl: string): Promise<string | null> => {
 	try {
-		logDebug(`Fetching text from API: ${apiUrl}`);
 		const response = await fetch(apiUrl);
-		logDebug(`Text API response status: ${response.status}`);
 
 		if (!response.ok) {
-			logDebug(`API request failed with status: ${response.status}`);
 			return null;
 		}
 
 		const data = (await response.json()) as TextResponse;
-		logDebug(`Text API response data:`, data);
 
 		if (data.success && data.data?.content) {
-			logDebug(`Successfully fetched text: ${data.data.content}`);
 			return data.data.content;
 		}
 
-		logDebug(`API request was not successful`);
 		return null;
 	} catch (error) {
-		logDebug(`Error fetching text:`, error);
 		return null;
 	}
-}
-
-// 匯出主要函數
-export { fetchText };
-export { sendMessages as sendLineMessages };
-export { sendText as sendReply };
-export { sendImage as sendImageReply };
-export { sendVideo as sendVideoReply };
-export { getGroupMemberProfile as fetchGroupMemberProfile };
+};
