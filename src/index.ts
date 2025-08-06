@@ -1,6 +1,6 @@
 // 引入拆分的模組
 import { Env, LineEvent } from './types/index.js';
-import { handleMessage } from './handlers/messageHandler.js';
+import { handleMessage } from './handlers/message-handler.js';
 import { preloadAllHoroscopes } from './services/horoscope.js';
 import { preloadAllCopywritings } from './services/copywriting.js';
 
