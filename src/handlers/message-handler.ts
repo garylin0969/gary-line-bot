@@ -189,7 +189,7 @@ const handleCopywritingCommand = async (replyToken: string, apiUrl: string, cach
 
 // 處理關鍵字命令
 const handleKeywordsCommand = async (replyToken: string, text: string, env: Env): Promise<void> => {
-	const matchedKey = Object.keys(KEY_WORDS_REPLY).find((key) => text.includes(key));
+	const matchedKey = Object.keys(KEY_WORDS_REPLY).find((key) => text === key);
 	if (matchedKey) {
 		await sendReply(replyToken, KEY_WORDS_REPLY[matchedKey as keyof typeof KEY_WORDS_REPLY], env.LINE_CHANNEL_ACCESS_TOKEN);
 	}
