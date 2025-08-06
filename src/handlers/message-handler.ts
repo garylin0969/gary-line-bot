@@ -26,6 +26,7 @@ enum CommandType {
 	FUNNY_COPYWRITING = 'funny_copywriting',
 	ROMANTIC_COPYWRITING = 'romantic_copywriting',
 	GAY = 'gay',
+	CAT = 'cat',
 	KEYWORDS = 'keywords',
 }
 
@@ -100,6 +101,11 @@ const detectCommand = (text: string): CommandDetection | null => {
 		return { type: CommandType.ROMANTIC_COPYWRITING, text, normalizedText };
 	}
 
+	// 貓咪命令
+	if (normalizedText === '!貓') {
+		return { type: CommandType.CAT, text, normalizedText };
+	}
+
 	// Gay命令
 	if (isGayCommand(normalizedText)) {
 		return { type: CommandType.GAY, text, normalizedText };
@@ -165,6 +171,10 @@ const handleCommand = async (event: LineEvent, command: CommandDetection, env: E
 
 			case CommandType.GAY:
 				await handleGay(event.replyToken!, env);
+				break;
+
+			case CommandType.CAT:
+				await sendImageReply(event.replyToken!, CONFIG.API.CAT_RANDOM_IMAGE + '&random=' + Math.random(), env.LINE_CHANNEL_ACCESS_TOKEN);
 				break;
 
 			case CommandType.KEYWORDS:

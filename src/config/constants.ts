@@ -17,6 +17,7 @@ export const CONFIG = {
 		LOVE_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/love-copywriting.json', // 愛情文案
 		FUNNY_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/funny-copywriting.json', // 搞笑文案
 		ROMANTIC_COPYWRITING_TEXT: 'https://garylin0969.github.io/json-gather/data/romantic-copywriting.json', // 浪漫文案
+		CAT_RANDOM_IMAGE: 'https://api.ai-cats.net/v1/cat?size=256&theme=All', // 貓咪隨機圖
 		LINE_REPLY: 'https://api.line.me/v2/bot/message/reply', // LINE 回覆
 	},
 } as const;
