@@ -84,12 +84,13 @@ const rollDice = (games: Record<string, GameState>, groupId: string, userId: str
 	return { success: true, data: response };
 };
 
-// 遊戲狀態 Durable Object
-export const GameStateObject = (state: DurableObjectState) => {
+// 遊戲狀態 Durable Object（需為可被 new 的類別）
+// 不使用 class，改用可被 new 的函式（建構式函式）實作 Durable Object
+export function GameStateObject(state: DurableObjectState) {
 	let games: Record<string, GameState> = {};
 
 	// 初始化時從 storage 讀取遊戲狀態
-	const initializeState = async () => {
+	const initializeState = async (): Promise<void> => {
 		const stored = (await state.storage.get('games')) as Record<string, GameState>;
 		if (stored) {
 			games = stored;
@@ -104,7 +105,7 @@ export const GameStateObject = (state: DurableObjectState) => {
 	};
 
 	// 儲存遊戲狀態
-	const saveState = async () => {
+	const saveState = async (): Promise<void> => {
 		await state.storage.put('games', games);
 	};
 
@@ -145,7 +146,7 @@ export const GameStateObject = (state: DurableObjectState) => {
 	};
 
 	// 主 fetch 函數
-	const fetch = async (request: Request) => {
+	const fetch = async (request: Request): Promise<Response> => {
 		await initializeState(); // 每次請求時確保狀態是最新的
 
 		const url = new URL(request.url);
@@ -172,7 +173,6 @@ export const GameStateObject = (state: DurableObjectState) => {
 		}
 	};
 
-	return {
-		fetch,
-	};
-};
+	// 以物件形式回傳 fetch，讓 new GameStateObject(...) 可得到實例
+	return { fetch };
+}

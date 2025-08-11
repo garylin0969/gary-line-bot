@@ -32,7 +32,8 @@ const handleRollNum = async (groupId: string, replyToken: string, text: string, 
 		return;
 	}
 
-	const parts = text.split(' ');
+	// 支援多個空白或 tab 的彈性分割
+	const parts = text.trim().split(/\s+/);
 
 	// 驗證命令格式
 	if (parts.length !== 2) {
