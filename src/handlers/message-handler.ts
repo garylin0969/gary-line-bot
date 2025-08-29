@@ -271,8 +271,8 @@ const handleHoroscope = async (zodiacKey: string, replyToken: string, userId: st
 // 處理甲圖
 const handleGay = async (replyToken: string, env: Env): Promise<void> => {
 	try {
-		// 隨機選擇 1-20 之間的數字
-		const randomNumber = Math.floor(Math.random() * 20) + 1;
+		// 隨機選擇 1-35 之間的數字
+		const randomNumber = Math.floor(Math.random() * 35) + 1;
 
 		// 構建圖片 URL
 		const imageUrl = `https://garylin0969.github.io/json-gather/data/images/gay/gay${randomNumber}.jpg`;
